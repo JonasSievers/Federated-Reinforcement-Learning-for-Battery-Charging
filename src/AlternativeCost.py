@@ -8,8 +8,8 @@ import utils.Dataloader as Dataloader
 Calculates the alternative cost in the case without a battery
 """
 for i in range(13,14):
-    load_data, pv_data, price_data = Dataloader.get_customer_data(Dataloader.loadData('./data/load1213.csv'),
-                                             Dataloader.loadPrice('./data/price.csv'), i)
+    load_data, pv_data, price_data = Dataloader.get_customer_data(Dataloader.loadData('../data/load1213.csv'),
+                                             Dataloader.loadPrice('../data/price.csv'), i)
     day = 0
     timeslot = 0
     cost = 0.0
