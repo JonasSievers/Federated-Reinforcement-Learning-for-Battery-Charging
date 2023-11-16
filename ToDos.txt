@@ -1,0 +1,7 @@
+Implement Baselines: No battey, Rule based
+Optimize environment: Battery model
+Agents: Test different Agents
+Network architecture: Test different network architectures (FFNN, CNN, LSTM, Ensemble)
+Model based RL: Include Battery model
+Include predictions: PV, Load, Prices
+? Implement upper limit: MILP 
