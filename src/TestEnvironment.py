@@ -3,8 +3,11 @@ import unittest
 import numpy as np
 import pandas as pd
 
-import Dataloader
 import Environment as Env
+
+import sys
+sys.path.insert(0, '..')
+import utils.Dataloader as Dataloader
 
 
 class TestEnvironment(unittest.TestCase):
@@ -16,7 +19,7 @@ class TestEnvironment(unittest.TestCase):
         self.capacity = 13.5
         self.power_battery = 4.6
         self.power_grid = 25.0
-        self.data = Dataloader.get_customer_data(Dataloader.loadData('data.csv'), 1)
+        self.data = Dataloader.get_customer_data(Dataloader.loadData('../data.csv'), 1)
 
     def test_reset(self):
         self.environment = Env.Environment(init_charge=self.init_charge, data=self.data,
