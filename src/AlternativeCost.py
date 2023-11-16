@@ -1,5 +1,8 @@
 import numpy as np
-import Dataloader
+
+import sys
+sys.path.insert(0, '..')
+import utils.Dataloader as Dataloader
 
 """
 Calculates the alternative cost in the case without a battery
