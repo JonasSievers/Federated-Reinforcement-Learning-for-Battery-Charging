@@ -160,8 +160,7 @@ class Environment(py_environment.PyEnvironment):
             battery_wear_cost = 0.0
 
         # Calculate reward
-        current_reward = 10 * (
-                cost - profit) + 10 * energy_feed_in + 4 * battery_wear_cost + 4 * energy_missing + 15 * energy_leftover
+        current_reward = 10 * (cost - profit) + 10 * energy_feed_in + 4 * battery_wear_cost + 4 * energy_missing + 15 * energy_leftover
 
         # Log test
         if self._test:
