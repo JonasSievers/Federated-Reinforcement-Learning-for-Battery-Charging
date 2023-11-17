@@ -1,0 +1,52 @@
+{
+    "os": "Windows-10-10.0.19045-SP0",
+    "python": "3.10.5",
+    "heartbeatAt": "2023-11-17T12:48:29.626472",
+    "startedAt": "2023-11-17T12:48:28.684774",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "<python with no main file>",
+    "codePathLocal": null,
+    "git": {
+        "remote": "https://github.com/JonasSievers/Federated-Reinforcement-Learning-for-Battery-Charging.git",
+        "commit": "3c10ce0a97689c987a46a56630d283594de928ed"
+    },
+    "email": null,
+    "root": "C:/Users/rs1044/Documents/GitHub/Federated-Reinforcement-Learning-for-Battery-Charging",
+    "host": "IPEBLANK-PC4",
+    "username": "rs1044",
+    "executable": "c:\\Users\\rs1044\\Documents\\GitHub\\Federated-Reinforcement-Learning-for-Battery-Charging\\.venv\\Scripts\\python.exe",
+    "cpu_count": 12,
+    "cpu_count_logical": 24,
+    "cpu_freq": {
+        "current": 3701.0,
+        "min": 0.0,
+        "max": 3701.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3701.0,
+            "min": 0.0,
+            "max": 3701.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 462.7943344116211,
+            "used": 320.09078216552734
+        }
+    },
+    "gpu": "NVIDIA GeForce GT 1030",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce GT 1030",
+            "memory_total": 2147483648
+        }
+    ],
+    "memory": {
+        "total": 63.91092300415039
+    }
+}
