@@ -8,3 +8,6 @@
 # Pycache
 /src/__pycache__
 /src/utils/__pycache__
+
+# WandB
+/src/notebooks/wandb
