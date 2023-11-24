@@ -1,3 +1,10 @@
+# Virtual Environment
 .venv
-venv
+
+# Logs
 *.log
+/src/notebooks/log
+
+# Pycache
+/src/__pycache__
+/src/utils/__pycache__
