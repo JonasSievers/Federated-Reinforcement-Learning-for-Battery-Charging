@@ -1,6 +1,9 @@
 # Virtual Environment
 .venv
 
+# VS Code
+.vscode
+
 # Logs
 *.log
 /src/notebooks/log
