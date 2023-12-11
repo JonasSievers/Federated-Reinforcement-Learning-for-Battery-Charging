@@ -1,7 +1,7 @@
-Implement tracking with Wandb
 Implement Baselines: No battey, Rule based battery scheduling
 Optimize environment: Battery model
 
+Implement tracking with Wandb -> directly in modelClass
 integrate emissions
 
 Agents: Test different Agents
