@@ -67,10 +67,6 @@ class Baseline:
         if price_status == Price.HIGH:
             # Discharge Battery
             profit += self.dischargeBatteryExpensive(used_power)
-
-        # print(cost)
-        # print(profit)
-        # print("-------")
  
         return cost-profit
 
