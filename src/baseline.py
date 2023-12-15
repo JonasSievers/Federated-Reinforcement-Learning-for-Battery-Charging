@@ -31,10 +31,8 @@ class Baseline:
         profit = 0.0
         used_power = 0.0
 
-        # print(net_load)
-        # print(price_status)
-        # print(self.battery_soe)
-
+        # Process the net load
+        # If positive energy needed, otherwise energy abundance
         if net_load > 0:
             match price_status:
                 case Price.LOW:
@@ -59,7 +57,7 @@ class Baseline:
                     pass
                 case Price.HIGH:
                     # Sell leftover energy
-                    profit = abs(net_load) * self.current_price
+                    profit = abs(net_load) * self.current_price * 0.7
                     pass
 
 
