@@ -1,4 +1,4 @@
-Implement Baselines: No battey, Rule based battery scheduling
+Implement Baselines: No battey, Rule based battery scheduling (Compare with literature, resell price 0.7?)
 Optimize environment: Battery model
 
 Implement tracking with Wandb -> Done
