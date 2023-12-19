@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def loadData(data_path):
@@ -34,7 +35,7 @@ def process_fuelmix(dfmix):
     dfmix_processed = dfmix_sum.drop(columns=['Date', 'Start', 'End'])
     return dfmix_processed.set_index(pd.RangeIndex(0, 17520))
 
-def get_customer_data(dfload, dfprice, customer=1):
+def get_customer_data(dfload, dfprice, dfmix, customer=1):
     """
     Prepare the customer and price data
 
@@ -44,7 +45,7 @@ def get_customer_data(dfload, dfprice, customer=1):
     :return: dataframes for the given customer
     """
     customer_all_data = dfload[(dfload['Customer'] == customer)]
-    customer_reduced_data = customer_all_data.drop(columns=['Customer', 'Generator Capacity', 'Postcode'])
+    customer_reduced_data = customer_all_data.drop(columns=['Customer', 'Generator Capacity', 'Postcode', 'Row Quality'])
     gc = customer_reduced_data[customer_reduced_data['Consumption Category'] == 'GC'].set_index(pd.RangeIndex(0, 365)) \
         .drop(columns=['Consumption Category', 'date'])
     if len(customer_reduced_data[customer_reduced_data['Consumption Category'] == 'CL']) != 0:
@@ -65,6 +66,9 @@ def get_customer_data(dfload, dfprice, customer=1):
         pd.RangeIndex(0, 365)) \
         .drop(columns=['Consumption Category', 'date'])
     price_data = dfprice.drop(columns=['REGION', 'SETTLEMENTDATE', 'TOTALDEMAND', 'PERIODTYPE']).div(1000)
-    return customer_load_data, customer_pv_data, price_data
+    load_array = pd.DataFrame(np.array(customer_load_data).flatten())
+    pv_array = pd.DataFrame(np.array(customer_pv_data).flatten())
+    price_array = pd.DataFrame(np.array(price_data).flatten())
+    return load_array, pv_array, price_array, process_fuelmix(dfmix)
 
 

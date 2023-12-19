@@ -3,6 +3,7 @@
 
 # Logs
 *.log
+/log
 /src/notebooks/log
 
 # Pycache
