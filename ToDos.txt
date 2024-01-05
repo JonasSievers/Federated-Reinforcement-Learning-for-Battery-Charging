@@ -1,9 +1,9 @@
-Implement Baselines: No battey, Rule based battery scheduling (Compare with literature, resell price 0.7?)
-Optimize environment: Battery model
+Done - Implement Baselines: No battey, Rule based battery scheduling (Compare with literature, resell price 0.7?)
+Done - Implement tracking with Wandb
+Done - Implement custom agent networks
+"Done" - Emissions
 
-Implement tracking with Wandb -> Done
-Implement custom agent networks -> Done
-integrate emissions
+Optimize environment: Battery model
 
 Agents: Test different Agents
 Model based RL: Include Battery model
