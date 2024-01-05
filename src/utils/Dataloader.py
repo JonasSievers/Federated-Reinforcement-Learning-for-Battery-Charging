@@ -69,6 +69,6 @@ def get_customer_data(dfload, dfprice, dfmix, customer=1):
     load_array = pd.DataFrame(np.array(customer_load_data).flatten())
     pv_array = pd.DataFrame(np.array(customer_pv_data).flatten())
     price_array = pd.DataFrame(np.array(price_data).flatten())
-    return load_array, pv_array, price_array, process_fuelmix(dfmix)
+    return load_array, pv_array, price_array#, process_fuelmix(dfmix)
 
 

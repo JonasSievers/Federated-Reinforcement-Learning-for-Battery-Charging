@@ -57,8 +57,8 @@ class Environment(py_environment.PyEnvironment):
         self._action_spec = array_spec.BoundedArraySpec(shape=(2,), dtype=np.float32, minimum=[-self._power_grid/2,-self._power_battery/2], 
                                                         maximum=[self._power_grid/2,self._power_battery/2], name='action')
 
-        # Observation space [soe,energy_missing, energy_leftover, net_load,price]
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(5,), dtype=np.float32, name='observation')
+        # Observation space [soe,net_load,price]
+        self._observation_spec = array_spec.BoundedArraySpec(shape=(3,), dtype=np.float32, name='observation')
 
         #Hold the load, PV, and electricity price data, respectively, passed during initialization.
         self._load_data, self._pv_data, self._electricity_prices = data
@@ -96,7 +96,7 @@ class Environment(py_environment.PyEnvironment):
         
         #The method returns an initial TimeStep object using the ts.restart function. [SoE, load, pv, price]
         return ts.restart(
-            np.array([self._init_charge, 0.0, 0.0, net_load, electricity_price], dtype=np.float32)
+            np.array([self._init_charge, net_load, electricity_price], dtype=np.float32)
             )
 
     """
@@ -142,7 +142,7 @@ class Environment(py_environment.PyEnvironment):
 
         # balance energy
         old_soe = self._soe
-        new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover = self._balanceHousehold(old_soe, grid_action, battery_action, net_load)
+        new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover = self._balanceHousehold(old_soe, grid_action, battery_action, load, pv)
         self._soe = new_soe
 
         # Calculate Costs and Profits
@@ -169,20 +169,19 @@ class Environment(py_environment.PyEnvironment):
         # environment_score = sum_generated_energy / sum_bad_energy
 
         # Calculate reward
-        current_reward = (cost - profit) + energy_missing + energy_leftover + battery_wear_cost
+        # current_reward = 30 * (cost - profit) + 3 * energy_feed_in + 10 * battery_wear_cost + 10 * energy_leftover + 3 * environment_score * energy_from_grid
+        current_reward = (cost - profit) + energy_leftover + energy_missing + battery_wear_cost
 
         # Log test
         if self._test:
             with self._test_writer.as_default(step=self._current_timestep):
-                tf.summary.scalar(name='battery action', data=battery_action)
                 tf.summary.scalar(name='grid action', data=grid_action)
+                tf.summary.scalar(name='battery action', data=battery_action)
                 tf.summary.scalar(name='soe', data=new_soe)
                 tf.summary.scalar(name='energy missing', data=energy_missing)
                 tf.summary.scalar(name='energy leftover', data=energy_leftover)
                 tf.summary.scalar(name='pv', data=pv)
                 tf.summary.scalar(name='load', data=load)
-                tf.summary.scalar(name='price', data=electricity_price)
-                tf.summary.scalar(name='current reward', data=-current_reward)
 
         """
         If the last timeslot is reached and the maximum number of training days has been reached, 
@@ -194,14 +193,14 @@ class Environment(py_environment.PyEnvironment):
                 with self._test_writer.as_default(step=self._current_timestep):
                     tf.summary.scalar(name='cost', data=self._electricity_cost)
             
-            return ts.termination(np.array([new_soe, energy_missing, energy_leftover, net_load_forecast, electricity_price_forecast], dtype=np.float32),reward=-current_reward)
+            return ts.termination(np.array([new_soe, net_load_forecast, electricity_price_forecast], dtype=np.float32),reward=-current_reward)
         
         """
         For regular time steps, a transition TimeStep object is returned, representing the new state, 
         the negative of the current reward (as the environment aims to minimize costs), 
         and a discount factor of 1.0 (indicating no discounting in this scenario).
         """
-        return ts.transition(np.array([new_soe, energy_missing, energy_leftover, net_load_forecast, electricity_price_forecast], dtype=np.float32), reward=-current_reward)
+        return ts.transition(np.array([new_soe, net_load_forecast, electricity_price_forecast], dtype=np.float32), reward=-current_reward)
 
 
 
@@ -224,67 +223,207 @@ class Environment(py_environment.PyEnvironment):
         energy_missing = amount_to_discharge - energy_provided
         return new_soe, energy_provided, energy_missing
 
-    def _balanceHousehold(self, old_soe, grid_action, battery_action, net_load):
+    def _balanceHousehold(self, old_soe, grid_action, battery_action, load, pv):
         # grid_action > 0 -> buy energy from grid
         # grid_action < 0 -> sell energy to grid
         # battery_action > 0 -> charge battery
         # battery_action < 0 -> discharge battery
-        # energy_management > 0 -> need energy
-        # energy_management < 0 -> leftover energy
         energy_from_grid = 0.0
         energy_feed_in = 0.0
         energy_provided = 0.0
         energy_used = 0.0
         energy_missing = 0.0
         energy_leftover = 0.0
-        energy_management = net_load
+        net_load = load - pv
 
-        # Neutral case
-        if battery_action == 0.0:
-            new_soe = old_soe
-
-        # Provide energy
-        # Discharge battery
         if battery_action < 0:
             new_soe, energy_provided, energy_missing = self._dischargeBattery(np.abs(battery_action), old_soe)
-            energy_management -= energy_provided
-        
-        # Buy energy
-        if grid_action > 0:
-            energy_management -= grid_action
-            energy_from_grid = grid_action
-        
-        # Use energy
-        # Charge battery
-        if battery_action > 0:
-            # Leftover energy -> charge battery
-            if energy_management < 0:
-                charge_amount = np.clip(np.abs(energy_management), 0.0, battery_action)
-                if charge_amount < battery_action:
-                    energy_missing += battery_action - charge_amount
-                new_soe, energy_used, energy_leftover_charge = self._chargeBattery(charge_amount, old_soe)
-                energy_management += energy_used
-                energy_leftover += energy_leftover_charge
-            # Not enough energy -> dont charge battery
-            else:
-                new_soe = old_soe
-                energy_missing += battery_action
+            net_load -= energy_provided
+        elif battery_action > 0:
+            new_soe, energy_used, energy_leftover = self._chargeBattery(battery_action, old_soe)
+            net_load += energy_used
+        else:
+            new_soe = old_soe
 
         # Sell energy
         if grid_action < 0:
-            energy_management -= grid_action
+            needed_energy = net_load + np.abs(grid_action)
             # Not enough energy
-            if energy_management > 0:
-                energy_feed_in = np.clip(np.abs(grid_action)-energy_management, 0.0, np.abs(grid_action))
+            if needed_energy > 0:
+                energy_missing += needed_energy
+                energy_feed_in = np.clip(np.abs(grid_action)-needed_energy, 0.0, np.abs(grid_action))
             # Feed in energy
-            elif energy_management < 0:
+            else:
+                energy_leftover += np.abs(needed_energy)
                 energy_feed_in = np.abs(grid_action)
+        # Buy energy
+        else:
+            needed_energy = net_load - grid_action
+            energy_from_grid = grid_action
+            # Not enough energy
+            if needed_energy > 0:
+                energy_missing += net_load
+            # Leftover
+            else:
+                energy_leftover += np.abs(needed_energy)
 
-         # Not enough energy
-        if energy_management > 0:
-            energy_missing += energy_management
-         # Leftover energy
-        elif energy_management < 0:
-            energy_leftover += np.abs(energy_management)
+                  if net_load > 0:
+            energy_from_grid = net_load
+        elif net_load < 0:
+            energy_feed_in = np.abs(net_load)
+        
+
+        
 
         return new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover
+    
+
+    ----------------------------
+
+    import numpy as np
+
+def chargeBattery(amount_to_charge, old_soe):
+        new_soe = np.clip(amount_to_charge + old_soe, 0.0, 13.5, dtype=np.float32)
+        amount_charged = (new_soe - old_soe)
+        energy_leftover = amount_to_charge - amount_charged
+        if np.isclose([energy_leftover], [0]):
+            energy_leftover = 0.0
+        return new_soe, amount_charged, energy_leftover
+
+def dischargeBattery(amount_to_discharge, old_soe):
+    energy_provided = 0.0
+    # Battery soe can handle needed energy
+    if old_soe >= amount_to_discharge:
+        new_soe = old_soe - amount_to_discharge
+        energy_provided = amount_to_discharge
+    # Battery soe cant handle needed energy
+    elif old_soe < amount_to_discharge:
+        new_soe = 0.0
+        energy_provided = old_soe
+    energy_missing = amount_to_discharge - energy_provided
+    return new_soe, energy_provided, energy_missing
+
+def balanceHousehold(old_soe, grid_action, battery_action, load, pv):
+    energy_from_grid = 0.0
+    energy_feed_in = 0.0
+    energy_provided = 0.0
+    energy_used = 0.0
+    energy_missing = 0.0
+    energy_leftover = 0.0
+    net_load = load - pv
+
+
+    # Discharge Battery
+    if battery_action < 0:
+        new_soe, energy_provided, energy_missing = dischargeBattery(np.abs(battery_action), old_soe)
+        net_load -= energy_provided
+    # Charge Battery
+    else:
+        new_soe, energy_used, energy_leftover = chargeBattery(battery_action, old_soe)
+        net_load += energy_used
+
+    # Sell energy
+    if grid_action < 0:
+        # Energy available
+        if net_load < 0:
+            # More energy available to sell than planned
+            if np.abs(net_load) > np.abs(grid_action):
+                energy_leftover += np.abs(net_load) - np.abs(grid_action)
+                energy_feed_in = np.abs(grid_action)
+            # Less or fitting available to sell than planned
+            else:
+                energy_missing += np.abs(grid_action) - np.abs(net_load)
+                energy_feed_in = np.abs(net_load)
+        # Energy needed
+        else:
+            energy_feed_in = 0.0
+            energy_missing += np.abs(grid_action)
+    # Buy energy
+    else:
+        energy_from_grid = grid_action
+        # Energy available
+        if net_load < 0:
+            energy_leftover += np.abs(net_load)+grid_action
+        # Energy needed
+        else:
+            # To less energy bought
+            if net_load > grid_action:
+                energy_missing += net_load - grid_action
+            # More or fitting energy bought
+            else:
+                energy_leftover += grid_action - net_load
+
+    return new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover
+
+# print(balanceHousehold(0.0,1.4,0.5,2,1.5))
+
+energy_leftover = 0.0000001
+if np.isclose([energy_leftover], [0]):
+    energy_leftover = 0.0
+print(energy_leftover)
+
+new_soe = np.clip(0.6668 + 13.5, 0.0, 13.5, dtype=np.float32)
+print(new_soe)
+a, b, c = (0,1,2)
+print(c)
+
+
+---------------------
+
+import numpy as np
+
+def chargeBattery(amount_to_charge, old_soe):
+    new_soe = np.clip(amount_to_charge + old_soe, 0.0, 13.5, dtype=np.float32)
+    amount_charged = (new_soe - old_soe)
+    energy_leftover = amount_to_charge - amount_charged
+    if np.isclose([energy_leftover], [0]):
+        energy_leftover = 0.0
+    return new_soe, amount_charged, energy_leftover
+
+def dischargeBattery(amount_to_discharge, old_soe):
+    energy_provided = 0.0
+    # Battery soe can handle needed energy
+    if old_soe >= amount_to_discharge:
+        new_soe = old_soe - amount_to_discharge
+        energy_provided = amount_to_discharge
+    # Battery soe cant handle needed energy
+    elif old_soe < amount_to_discharge:
+        new_soe = 0.0
+        energy_provided = old_soe
+    energy_missing = amount_to_discharge - energy_provided
+    return new_soe, energy_provided, energy_missing
+
+def balanceHousehold(old_soe, battery_action, load, pv):
+    energy_from_grid = 0.0
+    energy_feed_in = 0.0
+    energy_provided = 0.0
+    energy_used = 0.0
+    energy_missing = 0.0
+    energy_leftover = 0.0
+    net_load = load - pv
+
+
+    # Discharge Battery
+    if battery_action < 0:
+        new_soe, energy_provided, energy_missing = dischargeBattery(np.abs(battery_action), old_soe)
+        net_load -= energy_provided
+        # More energy needed -> buy from grid
+        if net_load > 0:
+            energy_from_grid = net_load
+        # Feed in remaining energy
+        else:
+            energy_feed_in = np.abs(net_load)
+    # Charge Battery
+    else:
+        new_soe, energy_used, energy_leftover = chargeBattery(battery_action, old_soe)
+        net_load += energy_used
+        # More energy needed -> buy from grid
+        if net_load > 0:
+            energy_from_grid = net_load
+        # Feed in remaining energy
+        else:
+            energy_feed_in = np.abs(net_load)
+
+    return new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover
+
+print(balanceHousehold(13.5,0.6668, 0.162,1.744))

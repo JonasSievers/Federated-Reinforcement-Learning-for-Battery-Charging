@@ -16,7 +16,7 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 2000
+num_iterations = 1000
 customer = 1
 # Params for collect
 initial_collect_steps = 1000
