@@ -1,11 +1,11 @@
-Implement tracking with Wandb
-Implement Baselines: No battey, Rule based battery scheduling
+Done - Implement Baselines: No battey, Rule based battery scheduling (Compare with literature, resell price 0.7?)
+Done - Implement tracking with Wandb
+Done - Implement custom agent networks
+"Done" - Emissions
+
 Optimize environment: Battery model
 
-integrate emissions
-
 Agents: Test different Agents
-Network architecture: Test different network architectures (FFNN, CNN, LSTM, Ensemble)
 Model based RL: Include Battery model
 Include predictions: PV, Load, Prices
 ? Implement upper limit: MILP 

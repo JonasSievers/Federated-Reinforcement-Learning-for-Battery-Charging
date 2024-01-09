@@ -9,105 +9,61 @@ from tf_agents.networks import encoding_network
 
 class CriticNetworkCustom(network.Network):
 
-    def __init__(self,
-                observation_spec,
-                action_spec,
-                custom_layers=None,
-                name='CriticNetworkCustom'):
+    def __init__(self, 
+                 observation_spec, 
+                 action_spec, 
+                 custom_layers=[tf.keras.layers.Dense(units=16, activation='relu'),tf.keras.layers.Dense(units=16, activation='relu')], 
+                 name='CriticNetworkCustom',
+                 use_ensemble=False
+                 ):
         # Invoke constructor of network.Network
-        super(CriticNetworkCustom, self).__init__(
-              input_tensor_spec=(observation_spec, action_spec), state_spec=(), name=name)
+        super(CriticNetworkCustom, self).__init__(input_tensor_spec=(observation_spec, action_spec), state_spec=(), name=name)
 
         self._obs_spec = observation_spec
         self._action_spec = action_spec
 
-        # Initialize the custom Keras layers provided:
-        self._custom_layers = custom_layers
-        if custom_layers is not None:
-            # When custom layers are provided, use Concatenate as preprocessing_combiner
-            self._encoder = encoding_network.EncodingNetwork(
-                (observation_spec, action_spec),
-                fc_layer_params=(400,),
-                preprocessing_combiner=tf.keras.layers.Concatenate(axis=-1),
-                activation_fn=tf.keras.activations.relu,
-                kernel_initializer=tf.keras.initializers.VarianceScaling(scale=1./3., mode='fan_in', distribution='uniform'),
-                batch_squash=True)
-        else:
-            self._encoder = encoding_network.EncodingNetwork(
-                (observation_spec, action_spec),
-                fc_layer_params=(400,),
-                activation_fn=tf.keras.activations.relu,
-                kernel_initializer=tf.keras.initializers.VarianceScaling(scale=1./3., mode='fan_in', distribution='uniform'),
-                batch_squash=True)
-
-        # Initialize the custom tf layers here:
-        self._dense1 = tf.keras.layers.Dense(400, name='Dense1')
-        self._value_layer = tf.keras.layers.Dense(1,
-                                                  activation=tf.keras.activations.linear,
-                                                  name='Value')  # Q-function output
-
-    def call(self, observations, step_type=(), network_state=()):
-        # Forward pass through the custom Keras layers provided:
-        state, network_state = self._encoder(observations,
-                                             step_type=step_type,
-                                             network_state=network_state)
-
-        if self._custom_layers is not None:
-            # Additional logic for custom layers
-            layer_outputs = [state]
-            for layer in self._custom_layers:
-                state = layer(state)
-                layer_outputs.append(state)
-
-            value = self._value_layer(state)
-
-        else:
-            # Forward pass without custom layers
-            state = self._dense1(state)
-            value = self._value_layer(state)
-
-        return tf.reshape(value, [-1]), network_state
-
-
-
-"""class CriticNetworkCustom(network.Network):
-
-    def __init__(self,
-                observation_spec,
-                action_spec,
-                custom_layers=[tf.keras.layers.Dense(units=16, activation='relu'),tf.keras.layers.Dense(units=16, activation='relu')],
-                name='CriticNetworkCustom'):
-        # Invoke constructor of network.Network
-        super(CriticNetworkCustom, self).__init__(
-              input_tensor_spec=(observation_spec, action_spec), state_spec=(), name=name)
-
-        self._obs_spec = observation_spec
-        self._action_spec = action_spec
-
+        #flat_action_spec = tf.nest.flatten(action_spec)
+        #self._single_action_spec = flat_action_spec[0]
+                
         # Encoding layer concatenates state and action inputs, adds dense layer:
-        kernel_initializer = tf.keras.initializers.VarianceScaling(
-            scale=1./3., mode='fan_in', distribution='uniform')
+        kernel_initializer = tf.keras.initializers.VarianceScaling(scale=1./3., mode='fan_in', distribution='uniform')
         combiner = tf.keras.layers.Concatenate(axis=-1)
         self._encoder = encoding_network.EncodingNetwork(
             (observation_spec, action_spec),
-            fc_layer_params=(400,),
+            fc_layer_params=(64,),
             preprocessing_combiner = combiner,
             activation_fn = tf.keras.activations.relu,
             kernel_initializer = kernel_initializer,
             batch_squash=True)
 
         # Initialize the custom tf layers here:
-        self._dense1 = tf.keras.layers.Dense(400, name='Dense1')
-        self._value_layer = tf.keras.layers.Dense(1,
-                                                  activation=tf.keras.activations.linear,
-                                                  name='Value') # Q-function output
+        self._custom_layers = custom_layers
+
+        # Optional - TO BE IMPLEMENTED CORRECTLY: Use ensemble mode
+        self._use_ensemble = use_ensemble
+        if self._use_ensemble:
+            self._ensemble_layer = tf.keras.layers.Concatenate(axis=-1, name='ensemble_layer')
+        
+          # Initialize the value layer -> output_dim = 1 (Q-Value)
+        self._value_layer = tf.keras.layers.Dense(
+            units= 1,
+            activation=tf.keras.activations.linear,
+            kernel_initializer=tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003),
+            name='Value')  # Q-function output
+
 
     def call(self, observations, step_type=(), network_state=()):
         # Forward pass through the custom tf layers here (defined above):
-        state, network_state = self._encoder(observations, 
-                                             step_type=step_type, 
-                                             network_state=network_state)
-        state = self._dense1(state)
-        value = self._value_layer(state)
+        state, network_state = self._encoder(observations, step_type=step_type, network_state=network_state)
+                          
+        # Apply custom layers
+        layer_outputs = []
+        for layer in self._custom_layers:
+            layer_outputs.append(state)
+        # Additional logic for ensemble mode, if needed
+        if self._use_ensemble:
+            state = self._ensemble_layer(layer_outputs)
 
-        return tf.reshape(value,[-1]), network_state"""
+        value = self._value_layer(state)
+    
+        return tf.reshape(value, [-1]), network_state
