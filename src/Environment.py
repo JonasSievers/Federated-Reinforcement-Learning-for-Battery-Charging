@@ -27,22 +27,21 @@ class Environment(py_environment.PyEnvironment):
             self, 
             data, #load, pv and electricity price data
             init_charge, #initial state of charge of the battery in kWh
-            max_timeslots=48, #count of timeslots in 24h interval
-            max_days=365, #count of days to train on
+            timeslots_per_day=48, #count of timeslots in 24h interval
+            days=365, #count of days to train on
             capacity=13.5, #capacity of the battery in kWh
             power_battery=4.6, #power of the battery in kW
             power_grid=25.0, #power of the electricity grid in kW
             test=False
         ):
  
-        self._current_timeslot = -1 #Tracks the current timeslot in the simulation.
-        self._max_timeslots = max_timeslots #Maximum number of timeslots in a 24-hour interval.
-        self._current_day = 0 #Tracks the current day in the simulation.
-        self._max_days = max_days #Maximum number of days to train on.
+        self._current_timestep = -1 #Tracks the current timeslot in the simulation.
+        self._timeslots_per_day = timeslots_per_day #Maximum number of timeslots in a 24-hour interval.
+        self._max_timesteps = timeslots_per_day * days #Maximum number of days to train on.
         self._capacity = capacity #Capacity of the battery.
         self._power_battery = power_battery # Power of the battery.
         self._init_charge = init_charge #Initial state of charge of the battery.
-        self._soe = np.float32(init_charge) #State of charge of the battery (initialized based on init_charge).
+        self._soe = init_charge #State of charge of the battery (initialized based on init_charge).
         self._power_grid = power_grid #Power of the electricity grid.
         self._episode_ended = False #Boolean flag indicating whether the current episode has ended.
         self._electricity_cost = 0.0 #Cumulative electricity cost incurred during the simulation.
@@ -86,17 +85,13 @@ class Environment(py_environment.PyEnvironment):
     :return: initial TimeStep
     """
     def _reset(self):
-
-        self._current_timeslot = -1 #is set to -1, indicating that the next timeslot will be the first one.
-        self._current_day = 0 # is set to 0, indicating the start of a new training day.
+        self._current_timestep = -1 #is set to -1, indicating that the next timeslot will be the first one.
         self._soe = self._init_charge #is set to the initial charge value (_init_charge).
         self._episode_ended = False #signaling the start of a new episode.
         self._electricity_cost = 0.0 #as it accumulates the electricity cost during each episode.
         
         #The method returns an initial TimeStep object using the ts.restart function. [SoE, load, pv, price]
-        return ts.restart(
-            np.array([self._init_charge, 0.0, 0.0, 0.0], dtype=np.float32)
-            )
+        return ts.restart(np.array([self._init_charge, 0.0, 0.0, 0.0], dtype=np.float32))
 
     """
     The _step method simulates the agent's action in the environment, 
@@ -109,15 +104,8 @@ class Environment(py_environment.PyEnvironment):
 
         """
         Update Timeslot:
-        We first update the current timeslot and day in the simulation.
-        If the current timeslot exceeds the maximum allowed timeslots for a day, 
-        it increments the current day and resets the timeslot to the first one. This simulates the transition to a new day.
         """
-        if self._current_timeslot >= self._max_timeslots - 1:
-            self._current_day += 1
-            self._current_timeslot = 0
-        else:
-            self._current_timeslot += 1
+        self._current_timestep += 1
 
         """
         If the episode has already ended (_episode_ended is True), the environment is reset to its initial state by calling the reset method.
@@ -126,10 +114,9 @@ class Environment(py_environment.PyEnvironment):
             return self.reset()
 
         # load data
-        load = self._load_data.iloc[self._current_day][self._current_timeslot]
-        pv = self._pv_data.iloc[self._current_day][self._current_timeslot]
-        electricity_price = \
-            self._electricity_prices.iloc[(self._current_day * self._max_timeslots) + self._current_timeslot][0]
+        load = self._load_data.iloc[self._current_timestep, 0]
+        pv = self._pv_data.iloc[self._current_timestep, 0]
+        electricity_price = self._electricity_prices.iloc[self._current_timestep, 0]
         action_taken = action[0]
 
         # save old soe
@@ -176,7 +163,7 @@ class Environment(py_environment.PyEnvironment):
         If the last timeslot is reached and the maximum number of training days has been reached, 
         the episode is marked as ended. The method returns a termination TimeStep object.
         """
-        if self._current_day >= self._max_days - 1 and self._current_timeslot >= self._max_timeslots - 1:
+        if self._current_timestep >= self._max_timesteps - 1:
             self._episode_ended = True
             if self._test:
                 with self._test_writer.as_default(step=(self._current_day * 48) + self._current_timeslot):

@@ -8,7 +8,7 @@ from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
 
-import Dataloader
+import utils.dataloader as dataloader
 import Environment
 
 """
@@ -45,10 +45,10 @@ num_eval_episodes = 1
 eval_interval = 50
 
 # Load data
-data_train = Dataloader.get_customer_data(Dataloader.loadData('./data/load1011.csv'),
-                                          Dataloader.loadPrice('./data/price.csv'), customer)
-data_eval = Dataloader.get_customer_data(Dataloader.loadData('./data/load1112.csv'),
-                                         Dataloader.loadPrice('./data/price.csv'), customer)
+data_train = dataloader.get_customer_data(dataloader.loadData('./data/load1011.csv'),
+                                          dataloader.loadPrice('./data/price.csv'), customer)
+data_eval = dataloader.get_customer_data(dataloader.loadData('./data/load1112.csv'),
+                                         dataloader.loadPrice('./data/price.csv'), customer)
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -187,8 +187,8 @@ with tf.compat.v2.summary.record_if(True):
                 summary_prefix='Metrics')
 
 # Test
-data_test = Dataloader.get_customer_data(Dataloader.loadData('./data/load1213.csv'),
-                                         Dataloader.loadPrice('./data/price.csv'), customer)
+data_test = dataloader.get_customer_data(dataloader.loadData('./data/load1213.csv'),
+                                         dataloader.loadPrice('./data/price.csv'), customer)
 tf_env_test = tf_py_environment.TFPyEnvironment(Environment.Environment(init_charge=0.0, data=data_test, test=True))
 time_step_test = tf_env_test.reset()
 
