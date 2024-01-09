@@ -16,7 +16,7 @@ for i in range(1,2):
     sum_load = 0.0
     sum_pv = 0.0
 
-    while timeslot <= 17519:
+    while timeslot <= 17516:
         load = load_data.iloc[timeslot,0]
         pv = pv_data.iloc[timeslot,0]
         electricity_price = price_data.iloc[timeslot,0]
@@ -28,8 +28,5 @@ for i in range(1,2):
         sum_load += load
         sum_pv += pv
         timeslot += 1
-    print(i)
-    print(sum_pv)
-    print(sum_load)
     print(cost)
 
