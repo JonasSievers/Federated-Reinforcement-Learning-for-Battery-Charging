@@ -9,7 +9,7 @@ class Price(Enum):
     HIGH = 2
 
 class Baseline:
-    def __init__(self, customer=1, battery_soe=10, battery_capacity=13.5, battery_power=4.6):
+    def __init__(self, customer=1, battery_soe=0.0, battery_capacity=13.5, battery_power=4.6):
         self.load_data, self.pv_data, self.price_data = dataloader.get_customer_data(dataloader.loadData('data/load1213.csv'), dataloader.loadPrice('data/price.csv'), customer)
         self.customer = customer
         self.battery_soe = battery_soe
@@ -17,10 +17,10 @@ class Baseline:
         self.battery_power = battery_power
         self.current_price = 0
         self.charge_discharge_amount = 1
-    
-    def percentileSevenDays(self, window, low_percentile, high_percentile):
-        low_price = np.percentile(window.iloc[0:336].squeeze(), low_percentile)
-        high_price = np.percentile(window.iloc[0:336].squeeze(), high_percentile)
+        
+    def percentileOverTimeslots(self, length, window, low_percentile, high_percentile):
+        low_price = np.percentile(window.iloc[0:length].squeeze(), low_percentile)
+        high_price = np.percentile(window.iloc[0:length].squeeze(), high_percentile)
         return Price.HIGH if self.current_price > high_price else Price.LOW if self.current_price < low_price else Price.NORMAL
     
     def calculateBatteryEvents(self, timestep, price_status):
@@ -121,9 +121,9 @@ class Baseline:
         return profit
 
 
-    def slidingWindow(self, timestep):
-        shifted_price = self.price_data.reindex(index=np.roll(self.price_data.index,336-timestep))
-        return shifted_price.iloc[0:336].squeeze()
+    def slidingWindow(self, length, timestep):
+        shifted_price = self.price_data.reindex(index=np.roll(self.price_data.index,length-timestep))
+        return shifted_price.iloc[0:length].squeeze()
 
     def main(self,method):
         for i in np.arange(0.1,2.4,0.1):
@@ -131,8 +131,8 @@ class Baseline:
             self.charge_discharge_amount=i
             for timestep in range(0,17520):
                 self.current_price = self.price_data.iloc[timestep,0].squeeze()
-                window = self.slidingWindow(timestep)
-                price_status = method(window,30,70)
+                window = self.slidingWindow(24, timestep)
+                price_status = method(24,window,30,90)
                 value = self.calculateBatteryEvents(timestep, price_status)
                 cost += value
             print(i)
@@ -141,6 +141,6 @@ class Baseline:
 
 # Programm
 baseline = Baseline()
-baseline.main(baseline.percentileSevenDays)
+baseline.main(baseline.percentileOverTimeslots)
 
    
