@@ -16,7 +16,7 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 2500
+num_iterations = 6000
 customer = 1
 # Params for collect
 initial_collect_steps = 1000
@@ -31,7 +31,7 @@ target_update_period = 5
 
 # Params for train
 train_steps_per_iteration = 1
-batch_size = 48
+batch_size = 48 * 7
 actor_learning_rate = 1e-4
 critic_learning_rate = 1e-3
 dqda_clipping = None
@@ -117,7 +117,7 @@ collect_driver = dynamic_step_driver.DynamicStepDriver(
 )
 
 train_checkpointer = common.Checkpointer(
-    ckpt_dir='checkpoints/ddpg' + str(customer) + '/',
+    ckpt_dir='checkpoints/ddpgOnlyPrice_25_' + str(customer) + '/',
     max_to_keep=1,
     agent=tf_agent,
     policy=tf_agent.policy,
@@ -126,7 +126,7 @@ train_checkpointer = common.Checkpointer(
 )
 
 eval_summary_writer = tf.compat.v2.summary.create_file_writer(
-    logdir='./log/ddpg' + str(customer) + '/', flush_millis=10000
+    logdir='./log/ddpgOnlyPrice_25_' + str(customer) + '/', flush_millis=10000
 )
 
 eval_metrics = [
