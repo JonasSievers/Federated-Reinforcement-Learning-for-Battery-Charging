@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 
+
 def loadData(data_path):
     """
     Load the load and pv data from the csv
@@ -22,8 +23,19 @@ def loadPrice(data_path):
     dfprice = pd.read_csv(data_path, header=0, parse_dates=['SETTLEMENTDATE'], date_format="%y/%d/%m")
     return dfprice
 
+def loadMix(data_path):
+    dfmix = pd.read_csv(data_path, header=0)
+    return dfmix
 
-def get_customer_data(dfload, dfprice, customer=1):
+def process_fuelmix(dfmix):
+    dfmix_sum = pd.DataFrame(columns=dfmix.columns)
+    for i in range(0,35039,2):
+        sum = dfmix.iloc[i:i+2].sum()
+        dfmix_sum.loc[i] = sum
+    dfmix_processed = dfmix_sum.drop(columns=['Date', 'Start', 'End'])
+    return dfmix_processed.set_index(pd.RangeIndex(0, 17520))
+
+def get_customer_data(dfload, dfprice, dfmix, customer=1):
     """
     Prepare the customer and price data
 
@@ -57,4 +69,4 @@ def get_customer_data(dfload, dfprice, customer=1):
     load_array = pd.DataFrame(np.array(customer_load_data).flatten())
     pv_array = pd.DataFrame(np.array(customer_pv_data).flatten())
     price_array = pd.DataFrame(np.array(price_data).flatten())
-    return load_array, pv_array, price_array
+    return load_array, pv_array, price_array#, process_fuelmix(dfmix)
