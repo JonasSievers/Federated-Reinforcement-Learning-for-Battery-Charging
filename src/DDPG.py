@@ -18,7 +18,7 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 100
+num_iterations = 5000
 customer = 1
 # 0 = battery, 1 = household
 env = 0
@@ -134,9 +134,10 @@ wandb.init(
     job_type="train_eval_test",
     name="3_ex_09",
     config={
-      "batch_size": batch_size,
-      "actor_learning_rate": actor_learning_rate,
-      "critic_learning_rate": critic_learning_rate}
+        "train_steps": num_iterations,
+        "batch_size": batch_size,
+        "actor_learning_rate": actor_learning_rate,
+        "critic_learning_rate": critic_learning_rate}
 )
 
 artifact = wandb.Artifact(name='save', type="checkpoint")
