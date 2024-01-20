@@ -150,7 +150,7 @@ test_metrics = [
 ]
 
 train_checkpointer = common.Checkpointer(
-    ckpt_dir='checkpoints/ddpg/3_ex_09',
+    ckpt_dir='checkpoints/ddpg/',
     max_to_keep=1,
     agent=tf_agent,
     policy=tf_agent.policy,
