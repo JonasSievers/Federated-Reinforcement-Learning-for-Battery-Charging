@@ -9,14 +9,14 @@ Calculates the alternative cost in the case without a battery
 """
 for i in range(1,2):
     load_data, pv_data, price_data = dataloader.get_customer_data(dataloader.loadData('./data/load1213.csv'),
-                                             dataloader.loadPrice('./data/price.csv'), None, i)
+                                             dataloader.loadPrice('./data/price.csv'), None, 13)
     day = 0
     timeslot = 0
     cost = 0.0
     sum_load = 0.0
     sum_pv = 0.0
 
-    while timeslot <= 17517:
+    while timeslot <= 17505:
         load = load_data.iloc[timeslot,0]
         pv = pv_data.iloc[timeslot,0]
         electricity_price = price_data.iloc[timeslot,0]

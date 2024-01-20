@@ -9,7 +9,7 @@ from tf_agents.specs import array_spec
 from tf_agents.trajectories import time_step as ts
 
 
-class Environment(py_environment.PyEnvironment):
+class Household(py_environment.PyEnvironment):
 
     """
     Initialize the environment. Default values simulate tesla's powerwall
@@ -58,7 +58,7 @@ class Environment(py_environment.PyEnvironment):
 
         # Observation space
         # self._observation_spec = array_spec.BoundedArraySpec(shape=(3,5), dtype=np.float32, name='observation')
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(3,25), dtype=np.float32, name='observation')
+        self._observation_spec = array_spec.BoundedArraySpec(shape=(26,), dtype=np.float32, name='observation')
 
         #Hold the load, PV, and electricity price data, respectively, passed during initialization.
         self._load_data, self._pv_data, self._electricity_prices = data
@@ -86,10 +86,10 @@ class Environment(py_environment.PyEnvironment):
     def _reset(self):
         # Forecast values
         self._current_timestep = -1 #is set to -1, indicating that the next timeslot will be the first one.
-        load_forecast = self._load_data.iloc[0:24, 0]
-        pv_forecast = self._pv_data.iloc[0:24, 0]
+        # load_forecast = self._load_data.iloc[0:1, 0]
+        # pv_forecast = self._pv_data.iloc[0:1, 0]
         electricity_price_forecast = self._electricity_prices.iloc[0:24, 0]
-        net_load_forecast = np.subtract(load_forecast, pv_forecast)
+        # net_load_forecast = np.subtract(load_forecast, pv_forecast)
 
         # Reset environemnt
         self._soe = self._init_charge #is set to the initial charge value (_init_charge).
@@ -97,8 +97,10 @@ class Environment(py_environment.PyEnvironment):
         self._electricity_cost = 0.0 #as it accumulates the electricity cost during each episode.
 
         # Observation
-        observation = np.array([np.repeat(self._init_charge, 25), np.concatenate(([0.0], net_load_forecast)), np.concatenate(([0.0], electricity_price_forecast))], dtype=np.float32)
+        # observation = np.array([np.repeat(self._init_charge, 25), np.concatenate(([0.0], net_load_forecast)), np.concatenate(([0.0], electricity_price_forecast))], dtype=np.float32)
         # observation = np.concatenate(([self._init_charge, 0.0], np.concatenate(([0.0], electricity_price_forecast))), dtype=np.float32)
+        observation = np.concatenate(([self._init_charge], np.concatenate(([0.0], electricity_price_forecast))), dtype=np.float32)
+        # observation = np.array([self._init_charge, 0.0], dtype=np.float32)
 
         #The method returns an initial TimeStep object using the ts.restart function
         return ts.restart(observation)
@@ -127,21 +129,18 @@ class Environment(py_environment.PyEnvironment):
             return self.reset()
         
         # load data for current step
-        load = self._load_data.iloc[self._current_timestep, 0]
-        load_forecast = self._load_data.iloc[self._current_timestep+1 : self._current_timestep+25, 0]
-        pv = self._pv_data.iloc[self._current_timestep, 0]
-        pv_forecast = self._pv_data.iloc[self._current_timestep+1 : self._current_timestep+25, 0]
+        # load = self._load_data.iloc[self._current_timestep, 0]
+        # load_forecast = self._load_data.iloc[self._current_timestep+1 : self._current_timestep+2, 0]
+        # pv = self._pv_data.iloc[self._current_timestep, 0]
+        # pv_forecast = self._pv_data.iloc[self._current_timestep+1 : self._current_timestep+2, 0]
         electricity_price = self._electricity_prices.iloc[self._current_timestep, 0]
         electricity_price_forecast= self._electricity_prices.iloc[self._current_timestep+1 : self._current_timestep+25, 0]
-        net_load = load - pv
-        net_load_forecast = np.subtract(load_forecast, pv_forecast)
-
-        # fuel_mix = self._fuel_mix.iloc[self._current_timestep]
-        # fuel_mix = self._fuel_mix.iloc[self._current_timestep]
+        # net_load = load - pv
+        # net_load_forecast = np.subtract(load_forecast, pv_forecast)
 
         # balance energy
         old_soe = self._soe
-        new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover = self._balanceHousehold(old_soe, action[0], net_load)
+        new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover = self._balanceHousehold(old_soe, action[0], 0.0)
         self._soe = new_soe
 
         # Calculate Costs and Profits
@@ -149,33 +148,35 @@ class Environment(py_environment.PyEnvironment):
         profit = energy_feed_in * electricity_price * 0.7
         self._electricity_cost += cost - profit
 
-        # if energy_missing > 1e-07 or energy_missing < -1e-07 or energy_leftover > 1e-07 or energy_leftover < -1e-07:
-        #     penalty = 100
-        # else:
-        #     penalty = 0.0
+      
+        # Battery wear model
+        if new_soe < (0.2 * self._capacity):
+            battery_wear_cost = (0.2 * self._capacity) - new_soe
+        elif new_soe > (0.8 * self._capacity):
+            battery_wear_cost = new_soe - (0.8 * self._capacity)
+        else:
+            battery_wear_cost = 0.0
 
-        # Calculate Environmental Score 
-        # sum_generated_energy = fuel_mix.sum()
-        # sum_bad_energy = fuel_mix.iloc[7] + fuel_mix.iloc[8]+fuel_mix.iloc[9]+fuel_mix.iloc[1]
-        # environment_score = sum_bad_energy / sum_generated_energy
 
         # Calculate reward
-        # current_reward = 10*(profit - cost) - penalty
-        current_reward = (profit - cost) - energy_missing - energy_leftover
+        current_reward = (profit - cost) - battery_wear_cost - energy_missing - energy_leftover
 
         # Observation
+        # observation = np.array([new_soe, electricity_price], dtype=np.float32)
         # observation = np.concatenate(([new_soe, load], load_forecast, [pv], pv_forecast, [electricity_price], electricity_price_forecast), dtype=np.float32)
-        observation = np.array([np.repeat(new_soe, 25), np.concatenate(([net_load], net_load_forecast)), np.concatenate(([electricity_price], electricity_price_forecast))], dtype=np.float32)
+        # observation = np.array([np.repeat(new_soe, 25), np.concatenate(([net_load], net_load_forecast)), np.concatenate(([electricity_price], electricity_price_forecast))], dtype=np.float32)
+        # observation = np.array([np.repeat(new_soe, 25), np.concatenate(([electricity_price], electricity_price_forecast))], dtype=np.float32)
+        observation = np.concatenate(([new_soe], np.concatenate(([electricity_price], electricity_price_forecast))), dtype=np.float32)
         # observation = np.concatenate(([new_soe, net_load], np.concatenate(([electricity_price], electricity_price_forecast))), dtype=np.float32)
-
+    
         # Log test
         if self._test:
             with self._test_writer.as_default(step=self._current_timestep):
-                tf.summary.scalar(name='battery action', data=action[0])
+                tf.summary.scalar(name='action', data=action[0])
                 tf.summary.scalar(name='soe', data=new_soe)
                 tf.summary.scalar(name='energy missing', data=energy_missing)
                 tf.summary.scalar(name='energy leftover', data=energy_leftover)
-                tf.summary.scalar(name='net_load', data=net_load)
+                # tf.summary.scalar(name='net_load', data=net_load)
                 tf.summary.scalar(name='price', data=electricity_price)
                 tf.summary.scalar(name='current reward', data=current_reward)
 
@@ -219,39 +220,41 @@ class Environment(py_environment.PyEnvironment):
         energy_feed_in = 0.0
 
         energy_management = net_load - action
-
         # Sell energy
         if action < 0:
-            # More energy left than needed -> charge battery
+            # Do not need battery
             if energy_management < 0:
                 # Sell action
                 energy_feed_in = np.abs(action)
                 # Store leftover energy
-                amount_to_charge = np.abs(net_load - action)
+                amount_to_charge = np.abs(energy_management)
                 new_soe, energy_leftover = self._chargeBattery(amount_to_charge, old_soe)
-            # Need battery -> discharge battery
+            # Need battery
             elif energy_management > 0:
                 new_soe, energy_missing = self._dischargeBattery(energy_management, old_soe)
-                energy_feed_in = np.clip(np.abs(action) - energy_missing, 0.0, None)
+                energy_feed_in = np.clip(np.abs(action) - energy_missing, 0.0, None, dtype=np.float32)
             else:
                 new_soe = old_soe
+                energy_feed_in = np.abs(action)
         # Buy energy or do nothing
         else:
-            energy_from_grid = action
-            # More energy left than needed -> charge battery
+            # More energy than needed -> charge battery
             if energy_management < 0:
                 amount_to_charge = np.abs(energy_management)
                 new_soe, energy_leftover = self._chargeBattery(amount_to_charge, old_soe)
-            # Need battery -> discharge battery
+                energy_from_grid = np.clip(action - energy_leftover, 0.0, None)
+            # Need battery
             elif energy_management > 0:
+                energy_from_grid = action
                 amount_to_discharge = energy_management
                 new_soe, energy_missing = self._dischargeBattery(amount_to_discharge, old_soe)
             else:
                 new_soe = old_soe
+                energy_from_grid = action
         
-        if np.isclose([energy_missing], [0]):
+        if np.isclose([energy_missing], [0.0]):
             energy_missing = 0.0
-        if np.isclose([energy_leftover], [0]):
+        if np.isclose([energy_leftover], [0.0]):
             energy_leftover = 0.0
 
         return new_soe, energy_from_grid, energy_feed_in, energy_missing, energy_leftover

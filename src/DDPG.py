@@ -7,17 +7,21 @@ from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
+import wandb
 
 import utils.dataloader as dataloader
-import Environment
+import environments.battery as battery_env
+import environments.household as household_env
 
 """
 Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 6000
+num_iterations = 100
 customer = 1
+# 0 = battery, 1 = household
+env = 0
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -42,19 +46,27 @@ gradient_clipping = None
 
 # Params for eval and checkpoints
 num_eval_episodes = 1
+num_test_episodes = 1
 eval_interval = 50
 
 # Load data
 data_train = dataloader.get_customer_data(dataloader.loadData('./data/load1011.csv'),
-                                          dataloader.loadPrice('./data/price.csv'), dataloader.loadMix("./data/fuel2021.csv"), customer)
+                                          dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2021.csv"), customer)
 data_eval = dataloader.get_customer_data(dataloader.loadData('./data/load1112.csv'),
-                                         dataloader.loadPrice('./data/price.csv'), dataloader.loadMix("./data/fuel2122.csv"), customer)
+                                         dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2122.csv"), customer)
+data_test = dataloader.get_customer_data(dataloader.loadData('./data/load1213.csv'),
+                                         dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2223.csv"), customer)
+
+# Initiate env
+if env == 0:
+    tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_train))
+    tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_eval))
+else:
+    tf_env_train = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_train))
+    tf_env_eval = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_eval))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
-
-tf_env_train = tf_py_environment.TFPyEnvironment(Environment.Environment(init_charge=0.0, data=data_train))
-tf_env_eval = tf_py_environment.TFPyEnvironment(Environment.Environment(init_charge=0.0, data=data_eval))
 
 actor_net = ddpg.actor_network.ActorNetwork(
     input_tensor_spec=tf_env_train.observation_spec(),
@@ -116,8 +128,29 @@ collect_driver = dynamic_step_driver.DynamicStepDriver(
     num_steps=collect_steps_per_iteration,
 )
 
+wandb.login()
+wandb.init(
+    project="DDPG_battery",
+    job_type="train_eval_test",
+    name="3_ex_09",
+    config={
+      "batch_size": batch_size,
+      "actor_learning_rate": actor_learning_rate,
+      "critic_learning_rate": critic_learning_rate}
+)
+
+artifact = wandb.Artifact(name='save', type="checkpoint")
+
+eval_metrics = [
+    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=num_eval_episodes)
+]
+
+test_metrics = [
+    tf_metrics.AverageReturnMetric(name="AverageReturnTest", buffer_size=num_eval_episodes)
+]
+
 train_checkpointer = common.Checkpointer(
-    ckpt_dir='checkpoints/ddpgOnlyPrice_25_' + str(customer) + '/',
+    ckpt_dir='checkpoints/ddpg/3_ex_09',
     max_to_keep=1,
     agent=tf_agent,
     policy=tf_agent.policy,
@@ -125,15 +158,8 @@ train_checkpointer = common.Checkpointer(
     global_step=global_step
 )
 
-eval_summary_writer = tf.compat.v2.summary.create_file_writer(
-    logdir='./log/ddpgOnlyPrice_25_' + str(customer) + '/', flush_millis=10000
-)
-
-eval_metrics = [
-    tf_metrics.AverageReturnMetric(buffer_size=num_eval_episodes)
-]
-
 train_checkpointer.initialize_or_restore()
+
 global_step = tf.compat.v1.train.get_global_step()
 
 # For better performance
@@ -154,44 +180,48 @@ dataset = replay_buffer.as_dataset(
 ).prefetch(3)
 iterator = iter(dataset)
 
-with tf.compat.v2.summary.record_if(True):
-    metric_utils.eager_compute(
-        eval_metrics,
-        tf_env_eval,
-        eval_policy,
-        num_episodes=num_eval_episodes,
-        train_step=global_step,
-        summary_writer=eval_summary_writer,
-        summary_prefix='Metrics')
+# Train and evaluate
+print("Start training ...")
+while global_step.numpy() < num_iterations:
+    time_step, policy_state = collect_driver.run(
+        time_step=time_step,
+        policy_state=policy_state,
+    )
+    experience, _ = next(iterator)
+    train_loss = tf_agent.train(experience)
+    metrics = {}
+    if global_step.numpy() % eval_interval == 0:
+        train_checkpointer.save(global_step)
+        metrics = metric_utils.eager_compute(
+            eval_metrics,
+            tf_env_eval,
+            eval_policy,
+            num_episodes=num_eval_episodes,
+            train_step=global_step,
+            summary_writer=None,
+            summary_prefix='',
+            use_function=True)
+    
+    metrics["loss"] = train_loss.loss
+    wandb.log(metrics)
 
-    # Train and evaluate
-    while global_step.numpy() <= num_iterations:
-        time_step, policy_state = collect_driver.run(
-            time_step=time_step,
-            policy_state=policy_state,
-        )
-        experience, _ = next(iterator)
-        train_loss = tf_agent.train(experience)
-        print('step = {0}: Loss = {1}'.format(global_step.numpy(), train_loss.loss))
-        with eval_summary_writer.as_default():
-            tf.summary.scalar(name='loss', data=train_loss.loss, step=global_step)
-        if global_step.numpy() % eval_interval == 0:
-            train_checkpointer.save(global_step)
-            metric_utils.eager_compute(
-                eval_metrics,
-                tf_env_eval,
-                eval_policy,
-                num_episodes=num_eval_episodes,
-                train_step=global_step,
-                summary_writer=eval_summary_writer,
-                summary_prefix='Metrics')
+# Initiate test env
+if env == 0:
+    tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_test, test=True))
+else:
+    tf_env_test = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_test, test=True))
 
-# Test
-data_test = dataloader.get_customer_data(dataloader.loadData('./data/load1213.csv'),
-                                         dataloader.loadPrice('./data/price.csv'), dataloader.loadMix("./data/fuel2223.csv"), customer)
-tf_env_test = tf_py_environment.TFPyEnvironment(Environment.Environment(init_charge=0.0, data=data_test, test=True))
-time_step_test = tf_env_test.reset()
-
-while not time_step_test.is_last():
-    action_step = tf_agent.policy.action(time_step_test)
-    time_step_test = tf_env_test.step(action_step.action)
+print("Start testing ...")
+metrics = metric_utils.eager_compute(
+    test_metrics,
+    tf_env_test,
+    eval_policy,
+    num_episodes=num_test_episodes,
+    train_step=None,
+    summary_writer=None,
+    summary_prefix='',
+    use_function=True)
+wandb.log(metrics)
+artifact.add_dir(local_path='checkpoints/ddpg/')
+wandb.log_artifact(artifact)
+wandb.finish()

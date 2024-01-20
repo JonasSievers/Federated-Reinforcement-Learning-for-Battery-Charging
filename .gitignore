@@ -3,13 +3,16 @@
 
 # Logs
 *.log
-/log
 /src/notebooks/log
 
 # Pycache
 /src/__pycache__
 /src/utils/__pycache__
+/src/environments/__pycache__
 
 # WandB
+/wandb
 /src/notebooks/wandb
 /src/notebooks/save
+/src/environments/__pycache__
+/checkpoints
