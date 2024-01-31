@@ -130,11 +130,12 @@ class Battery(py_environment.PyEnvironment):
         new_soe = np.clip(old_soe + battery_action, a_min=0.0, a_max=self._capacity, dtype=np.float32)
         amount_charged_discharged = (new_soe - old_soe)
         energy_leftover_missing = np.abs(battery_action - amount_charged_discharged)
-        penalty_factor = 1
+        
+        """penalty_factor = 1
         overcharge_penalty = 0 if new_soe <= self._capacity else abs(new_soe - self._capacity) * penalty_factor
-        full_discharge_penalty = 0 if new_soe >= 0 else abs(new_soe) * penalty_factor
+        full_discharge_penalty = 0 if new_soe >= 0 else abs(new_soe) * penalty_factor"""
+        
         energy_management = net_load + amount_charged_discharged
-
         if energy_management < 0: # Sell energy
             energy_feed_in = np.abs(energy_management)
         elif energy_management > 0: # Buy energy
@@ -159,15 +160,14 @@ class Battery(py_environment.PyEnvironment):
         # sum_bad_energy = fuel_mix.iloc[7] + fuel_mix.iloc[8]+fuel_mix.iloc[9]+fuel_mix.iloc[1]
         # environment_score = sum_bad_energy / sum_generated_energy
 
-        #current_reward = profit - cost - energy_leftover_missing # Calculate reward
-        current_reward = profit - cost - overcharge_penalty - full_discharge_penalty
+        current_reward = profit - cost - energy_leftover_missing # Calculate reward
+        #current_reward = profit - cost - overcharge_penalty - full_discharge_penalty
 
         #Create observation: SoE, price + 6 price forecasts
         observation = np.concatenate(([new_soe, electricity_price], electricity_price_forecast), dtype=np.float32)
-
+        
         # Log test
         if self._test:
-            print('action: ', battery_action, ' , soe: ',  new_soe, 'reward: ', current_reward, ' , energy imbalance: ', energy_leftover_missing)
             wandb.log({'battery action': battery_action, 'soe': new_soe, 'energy leftover or missing': energy_leftover_missing})
 
         # Check for episode end
