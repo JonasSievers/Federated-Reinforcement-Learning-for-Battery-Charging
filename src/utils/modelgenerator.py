@@ -57,7 +57,7 @@ class ModelGenerator():
     cnn_layers.append(tf.keras.layers.Dropout(dropout))
     return cnn_layers
   
-  def get_lstm_model(self, layers=2, units=128, dropout=0.2):
+  def get_lstm_model(self, layers=2, units=20, dropout=0.2):
     """
     Generate a list of LSTM layers followed by global average pooling and a dropout layer.
 
@@ -74,7 +74,7 @@ class ModelGenerator():
     lstm_layers.append(tf.keras.layers.Dropout(dropout))
     return lstm_layers
   
-  def get_bilstm_model(self, layers=2, units=128, dropout=0.2):
+  def get_bilstm_model(self, layers=2, units=20, dropout=0.2):
     """
     Generate a list of Bidirectional LSTM layers followed by global average pooling, dropout, and a dense layer.
 
