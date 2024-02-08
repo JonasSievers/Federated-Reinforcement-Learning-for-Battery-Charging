@@ -6,7 +6,7 @@ import tensorflow as tf
 class ModelGenerator():
 
 
-  def get_dense_layers(self, layers=3, units=128, dropout=0.2, activation="relu"):
+  def get_dense_layers(self, layers=3, units=256, dropout=0.2, activation="relu"):
     """
     Generate a list of dense layers followed by a dropout layer.
 

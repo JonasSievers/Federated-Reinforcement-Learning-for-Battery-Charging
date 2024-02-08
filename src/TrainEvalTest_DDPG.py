@@ -108,6 +108,8 @@ tf_agent.initialize()
 eval_policy = tf_agent.policy
 collect_policy = tf_agent.collect_policy
 
+print("Batch: ", tf_env_train.batch_size)
+
 replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
     tf_agent.collect_data_spec,
     batch_size=tf_env_train.batch_size,

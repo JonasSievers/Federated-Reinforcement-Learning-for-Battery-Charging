@@ -7,17 +7,17 @@ from tf_agents.utils import common as common_utils
 from tf_agents.utils import nest_utils
 from tf_agents.networks import encoding_network
 
-class CriticNetworkCustom(network.Network):
+class CriticNetwork(network.Network):
 
     def __init__(self, 
                  observation_spec, 
                  action_spec, 
                  custom_layers=[tf.keras.layers.Dense(units=16, activation='relu'),tf.keras.layers.Dense(units=16, activation='relu')], 
-                 name='CriticNetworkCustom',
+                 name='CriticNetwork',
                  use_ensemble=False
                  ):
         # Invoke constructor of network.Network
-        super(CriticNetworkCustom, self).__init__(input_tensor_spec=(observation_spec, action_spec), state_spec=(), name=name)
+        super(CriticNetwork, self).__init__(input_tensor_spec=(observation_spec, action_spec), state_spec=(), name=name)
 
         self._obs_spec = observation_spec
         self._action_spec = action_spec
