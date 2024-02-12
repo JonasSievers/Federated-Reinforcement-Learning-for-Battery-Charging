@@ -18,7 +18,12 @@ class Baseline:
         self.current_price = 0
         self.charge_discharge_amount = 1
         
-    def percentileOverTimeslots(self, length, window, low_percentile, high_percentile):
+    def percentileOverPastTimeslots(self, length, window, low_percentile, high_percentile):
+        low_price = np.percentile(window.iloc[0:length].squeeze(), low_percentile)
+        high_price = np.percentile(window.iloc[0:length].squeeze(), high_percentile)
+        return Price.HIGH if self.current_price > high_price else Price.LOW if self.current_price < low_price else Price.NORMAL
+    
+    def percentileOverFutureTimeslots(self, length, window, low_percentile, high_percentile):
         low_price = np.percentile(window.iloc[0:length].squeeze(), low_percentile)
         high_price = np.percentile(window.iloc[0:length].squeeze(), high_percentile)
         return Price.HIGH if self.current_price > high_price else Price.LOW if self.current_price < low_price else Price.NORMAL
@@ -68,7 +73,7 @@ class Baseline:
             # Discharge Battery
             profit += self.dischargeBatteryExpensive(used_power)
  
-        return cost-profit
+        return profit-cost
 
 
     def dischargeBatteryNeed(self, net_load):
@@ -141,6 +146,6 @@ class Baseline:
 
 # Programm
 baseline = Baseline()
-baseline.main(baseline.percentileOverTimeslots)
+baseline.main(baseline.percentileOverPastTimeslots)
 
-   
+#    TODO

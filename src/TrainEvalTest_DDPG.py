@@ -3,13 +3,16 @@ from tf_agents.agents import ddpg
 from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.drivers import dynamic_step_driver
 from tf_agents.environments import tf_py_environment
+from tf_agents.environments import batched_py_environment
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
+from tf_agents.system.system_multiprocessing import multiprocessing_core
 import wandb
 
 import utils.dataloader as dataloader
+import utils.new_dataloader as new_dataloader
 import environments.battery as battery_env
 import environments.household as household_env
 
@@ -20,6 +23,8 @@ Train and evaluate a DDPG agent
 # Param for iteration
 num_iterations = 5000
 customer = 1
+# Experiment
+experiment = "3_ex_43"
 # 0 = battery, 1 = household
 env = 0
 # Params for collect
@@ -34,8 +39,7 @@ target_update_tau = 0.05
 target_update_period = 5
 
 # Params for train
-train_steps_per_iteration = 1
-batch_size = 48 * 7
+batch_size = 128
 actor_learning_rate = 1e-4
 critic_learning_rate = 1e-3
 dqda_clipping = None
@@ -50,20 +54,15 @@ num_test_episodes = 1
 eval_interval = 50
 
 # Load data
-data_train = dataloader.get_customer_data(dataloader.loadData('./data/load1011.csv'),
-                                          dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2021.csv"), customer)
-data_eval = dataloader.get_customer_data(dataloader.loadData('./data/load1112.csv'),
-                                         dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2122.csv"), customer)
-data_test = dataloader.get_customer_data(dataloader.loadData('./data/load1213.csv'),
-                                         dataloader.loadPrice('./data/price_wo_outlier.csv'), dataloader.loadMix("./data/fuel2223.csv"), customer)
+train, eval, test = new_dataloader.getCustomerData('./data/load1011.csv','./data/load1112.csv','./data/load1213.csv','./data/price_wo_outlier.csv', customer)
 
 # Initiate env
 if env == 0:
-    tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_train))
-    tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_eval))
+    tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
+    tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=eval))
 else:
-    tf_env_train = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_train))
-    tf_env_eval = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_eval))
+    tf_env_train = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=train))
+    tf_env_eval = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=eval))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -132,7 +131,7 @@ wandb.login()
 wandb.init(
     project="DDPG_battery",
     job_type="train_eval_test",
-    name="3_ex_09",
+    name=experiment,
     config={
         "train_steps": num_iterations,
         "batch_size": batch_size,
@@ -151,7 +150,7 @@ test_metrics = [
 ]
 
 train_checkpointer = common.Checkpointer(
-    ckpt_dir='checkpoints/ddpg/',
+    ckpt_dir='checkpoints/ddpg/'+experiment,
     max_to_keep=1,
     agent=tf_agent,
     policy=tf_agent.policy,
@@ -208,9 +207,9 @@ while global_step.numpy() < num_iterations:
 
 # Initiate test env
 if env == 0:
-    tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=data_test, test=True))
+    tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=test, test=True))
 else:
-    tf_env_test = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=data_test, test=True))
+    tf_env_test = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=test, test=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(

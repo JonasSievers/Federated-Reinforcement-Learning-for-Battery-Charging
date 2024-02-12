@@ -3,38 +3,28 @@ import numpy as np
 import sys
 sys.path.insert(0, '..')
 import utils.dataloader as Dataloader
+import utils.new_dataloader as new_dataloader
 
 """
 Calculates the alternative cost in the case without a battery
 """
-for i in range(13,14):
-    load_data, pv_data, price_data = Dataloader.get_customer_data(Dataloader.loadData('data/load1213.csv'),
-                                             Dataloader.loadPrice('data/price.csv'), i)
-    day = 0
-    timeslot = 0
+for i in range(1,2):
+    train, eval, test = new_dataloader.getCustomerData('./data/load1011.csv','./data/load1112.csv','./data/load1213.csv','./data/price_wo_outlier.csv', i)
+    data, electricity_prices, electricity_prices_scaled = eval
+    timeslot = 1
     cost = 0.0
-    sum_load = 0.0
-    sum_pv = 0.0
 
-    while day <= 364:
-        load = load_data.iloc[day][timeslot]
-        pv = pv_data.iloc[day][timeslot]
-        electricity_price = price_data.iloc[(day * 48) + timeslot][0]
+    while timeslot <= 17519:
+        load = data.iloc[timeslot,1]
+        pv = data.iloc[timeslot,2]
+        electricity_price = electricity_prices_scaled[timeslot]
         net_load = load - pv
         if net_load < 0:
             cost += net_load * electricity_price * 0.7
         else:
-            print(net_load)
-            cost += np.clip(a=net_load, a_min=0, a_max= 100.0) * electricity_price
-        sum_load += load
-        sum_pv += pv
-        if timeslot == 47:
-            timeslot = 0
-            day += 1
-        else:
-            timeslot += 1
+            cost += net_load * electricity_price
+        timeslot += 1
+
     print(i)
-    print(sum_pv)
-    print(sum_load)
     print(cost)
 
