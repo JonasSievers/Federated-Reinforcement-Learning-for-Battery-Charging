@@ -7,16 +7,16 @@ from tf_agents.utils import common as common_utils
 from tf_agents.utils import nest_utils
 
 
-class ActorNetworkCustom(network.Network):
+class ActorNetwork(network.Network):
 
     def __init__(self, 
                  observation_spec, 
                  action_spec, 
                  custom_layers=[tf.keras.layers.Dense(units=16, activation='relu'),tf.keras.layers.Dense(units=16, activation='relu')],
-                 name='AgentNetworkCustomLayers', 
+                 name='AgentNetwork', 
                  use_ensemble=False
                  ):
-        super(ActorNetworkCustom, self).__init__(input_tensor_spec=observation_spec, state_spec=(), name=name)
+        super(ActorNetwork, self).__init__(input_tensor_spec=observation_spec, state_spec=(), name=name)
 
         # Preprocess Action: Flatten
         self._action_spec = action_spec

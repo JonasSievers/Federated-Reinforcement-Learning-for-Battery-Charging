@@ -103,17 +103,10 @@ class Household(py_environment.PyEnvironment):
     """
     def _step(self, action):
 
-        """
-        Update Timeslot:
-        We first update the current timeslot and day in the simulation.
-        If the current timeslot exceeds the maximum allowed timeslots for a day, 
-        it increments the current day and resets the timeslot to the first one. This simulates the transition to a new day.
-        """
+        #Update Timeslot:
         self._current_timestep += 1
 
-        """
-        If the episode has already ended (_episode_ended is True), the environment is reset to its initial state by calling the reset method.
-        """
+        #Check for episode end
         if self._episode_ended:
             return self.reset()
         

@@ -13,7 +13,7 @@ import wandb
 class Battery(py_environment.PyEnvironment):
 
     """
-    Initialize the environment. Default values simulate tesla's powerwall
+    Initialize the environment. Default values simulate tesla's powerwall (13.5 kWh, with 4.6 kW power, 2.3 charge, -2.3 discharge, and grid 25 kW)
 
     :param data: load, pv and electricity price data
     :param init_charge: initial state of charge of the battery in kWh
@@ -96,29 +96,22 @@ class Battery(py_environment.PyEnvironment):
         return ts.restart(observation)
 
     """
-    The _step method simulates the agent's action in the environment, 
-    updates the state based on the action taken, and returns the next TimeStep object, 
-    which encapsulates the new state, reward, and whether the episode has ended.
+    Simulate the effect of the battery action on the environment, including updating timeslot, loading data, 
+    balancing energy, calculating reward, and creating an observation. 
+
     :param action: action taken by the policy
     :return: next TimeStep
     """
     def _step(self, action):
 
-        """
-        Update Timeslot:
-        We first update the current timeslot and day in the simulation.
-        If the current timeslot exceeds the maximum allowed timeslots for a day, 
-        it increments the current day and resets the timeslot to the first one. This simulates the transition to a new day.
-        """
+        #Update the timeslot
         self._current_timestep += 1
 
-        """
-        If the episode has already ended (_episode_ended is True), the environment is reset to its initial state by calling the reset method.
-        """
+        #Check for Episode termination to reset
         if self._episode_ended:
             return self.reset()
         
-        # manage actions
+        #Get the agents action
         battery_action = action[0]
 
         # load data for current step
@@ -131,12 +124,12 @@ class Battery(py_environment.PyEnvironment):
         pv_forecast = self._load_pv_data.iloc[self._current_timestep+1 : self._current_timestep+5, 2].mean()
         electricity_price_forecast = self._electricity_prices[self._current_timestep+1 : self._current_timestep+5].mean()
 
-        # balance energy
+        #Balance energy
         old_soe = self._soe
         energy_from_grid = 0.0
         energy_feed_in = 0.0        
 
-        new_soe = np.clip(old_soe + battery_action, 0.0, self._capacity, dtype=np.float32)
+        new_soe = np.clip(old_soe + battery_action, a_min=0.0, a_max=self._capacity, dtype=np.float32)
         amount_charged_discharged = (new_soe - old_soe)
         self._soe = new_soe
 
@@ -174,9 +167,6 @@ class Battery(py_environment.PyEnvironment):
         # Calculate reward
         current_reward = profit - cost - battery_wear_cost
 
-        # Observation calculation
-        # timeslot = self._current_timestep % self._timeslots_per_day
-
         observation = np.array([self._soe, load, pv, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
 
         # Log test
@@ -194,9 +184,5 @@ class Battery(py_environment.PyEnvironment):
                 wandb.log({'profit': self._electricity_cost})           
             return ts.termination(observation=observation,reward=current_reward)
 
-        """
-        For regular time steps, a transition TimeStep object is returned, representing the new state, 
-        the negative of the current reward (as the environment aims to minimize costs), 
-        and a discount factor of 1.0 (indicating no discounting in this scenario).
-        """
+        #Return observation and reward
         return ts.transition(observation=observation,reward=current_reward)

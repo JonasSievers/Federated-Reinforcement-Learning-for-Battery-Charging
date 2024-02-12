@@ -35,7 +35,7 @@ def process_fuelmix(dfmix):
     dfmix_processed = dfmix_sum.drop(columns=['Date', 'Start', 'End'])
     return dfmix_processed.set_index(pd.RangeIndex(0, 17520))
 
-def get_customer_data(dfload, dfprice, dfmix, customer=1):
+def get_customer_data(dfload, dfprice, dfmix="", customer=1):
     """
     Prepare the customer and price data
 

@@ -6,7 +6,7 @@ import tensorflow as tf
 class ModelGenerator():
 
 
-  def get_dense_layers(self, layers=3, units=128, dropout=0.2, activation="relu"):
+  def get_dense_layers(self, layers=3, units=256, dropout=0.2, activation="relu"):
     """
     Generate a list of dense layers followed by a dropout layer.
 
@@ -57,7 +57,7 @@ class ModelGenerator():
     cnn_layers.append(tf.keras.layers.Dropout(dropout))
     return cnn_layers
   
-  def get_lstm_model(self, layers=2, units=128, dropout=0.2):
+  def get_lstm_model(self, layers=2, units=20, dropout=0.2):
     """
     Generate a list of LSTM layers followed by global average pooling and a dropout layer.
 
@@ -74,7 +74,7 @@ class ModelGenerator():
     lstm_layers.append(tf.keras.layers.Dropout(dropout))
     return lstm_layers
   
-  def get_bilstm_model(self, layers=2, units=128, dropout=0.2):
+  def get_bilstm_model(self, layers=2, units=20, dropout=0.2):
     """
     Generate a list of Bidirectional LSTM layers followed by global average pooling, dropout, and a dense layer.
 
