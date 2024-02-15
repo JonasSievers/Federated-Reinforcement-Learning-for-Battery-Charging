@@ -69,15 +69,16 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             return self.reset()
 
         # 1. Balance Battery -> Action clipping unnötig
+        penalty_factor = 1
         soe_old = self._soe
         self._soe = np.clip(soe_old + action[0], 0.0, self._capacity, dtype=np.float32)
-        penalty_soe  = np.abs(action[0] - (self._soe - soe_old))*5
+        penalty_soe  = np.abs(action[0] - (self._soe - soe_old))*penalty_factor
         
         lower_threshold, upper_threshold = 0.10 * self._capacity, 0.90 * self._capacity
         if self._soe < lower_threshold:
-            penalty_aging = np.abs(lower_threshold - self._soe) * 5
+            penalty_aging = np.abs(lower_threshold - self._soe) * penalty_factor
         elif self._soe > upper_threshold:
-            penalty_aging = np.abs(self._soe - upper_threshold) * 5
+            penalty_aging = np.abs(self._soe - upper_threshold) * penalty_factor
         else:
             penalty_aging = 0 
 
@@ -118,8 +119,11 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
                 'Imbalance': penalty_soe ,
                 'Profit (+ profit, - cost)': profit,
                 'Total Profit': self._total_electricity_bill,
-                'Current Timestep' : self._current_timestep,
                 'Reward' : reward,
+                'PV': p_pv, 
+                'Load' : p_load, 
+                'Price' : price_buy
+                #'Current Timestep' : self._current_timestep,
                 })
         # Check for episode end
         if self._current_timestep >= self._max_timesteps-8: 
