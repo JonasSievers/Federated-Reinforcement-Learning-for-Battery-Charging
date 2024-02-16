@@ -14,7 +14,7 @@ import wandb
 import utils.dataloader as dataloader
 import utils.new_dataloader as new_dataloader
 import environments.battery as battery_env
-import environments.household as household_env
+# import environments.household as household_env
 
 """
 Train and evaluate a DDPG agent
@@ -24,9 +24,7 @@ Train and evaluate a DDPG agent
 num_iterations = 5000
 customer = 1
 # Experiment
-experiment = "3_ex_43"
-# 0 = battery, 1 = household
-env = 0
+experiment = "1_ex_1"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -57,12 +55,8 @@ eval_interval = 50
 train, eval, test = new_dataloader.getCustomerData('./data/load1011.csv','./data/load1112.csv','./data/load1213.csv','./data/price_wo_outlier.csv', customer)
 
 # Initiate env
-if env == 0:
-    tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
-    tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=eval))
-else:
-    tf_env_train = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=train))
-    tf_env_eval = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=eval))
+tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
+tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=eval))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -208,10 +202,7 @@ while global_step.numpy() < num_iterations:
     wandb.log(metrics)
 
 # Initiate test env
-if env == 0:
-    tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=test, test=True))
-else:
-    tf_env_test = tf_py_environment.TFPyEnvironment(household_env.Household(init_charge=0.0, data=test, test=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=test, test=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(
