@@ -56,7 +56,7 @@ class Battery(py_environment.PyEnvironment):
         self._observation_spec = array_spec.BoundedArraySpec(shape=(6,), dtype=np.float32, minimum=0.0, name='observation')
 
         #Hold the load, PV, and electricity price data, respectively, passed during initialization.
-        self._load_pv_data, self._electricity_prices = data
+        self._data = data
 
     """
     Return the action spec
@@ -82,11 +82,13 @@ class Battery(py_environment.PyEnvironment):
         self._current_timestep = 0
         
         # weekday = self._load_pv_data.iloc[self._current_timestep,0]
-        load = self._load_pv_data.iloc[self._current_timestep,1]
-        pv = self._load_pv_data.iloc[self._current_timestep,2]
-        electricity_price = self._electricity_prices[self._current_timestep]
-        pv_forecast = self._load_pv_data.iloc[self._current_timestep+1 : self._current_timestep+5, 2].mean()
-        electricity_price_forecast = self._electricity_prices[self._current_timestep+1 : self._current_timestep+5].mean()
+        load = self._data.iloc[self._current_timestep,0]
+        pv = self._data.iloc[self._current_timestep,1]
+        electricity_price = self._data.iloc[self._current_timestep,2]
+        fuelmix = self._data.iloc[self._current_timestep,3]
+
+        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5,2].mean()
 
         self._soe = self._init_charge
         self._episode_ended = False
@@ -116,13 +118,14 @@ class Battery(py_environment.PyEnvironment):
 
         # load data for current step
         # weekday = self._load_pv_data.iloc[self._current_timestep,0]
-        load = self._load_pv_data.iloc[self._current_timestep,1]
-        pv = self._load_pv_data.iloc[self._current_timestep,2]
-        electricity_price = self._electricity_prices[self._current_timestep]
+        load = self._data.iloc[self._current_timestep,0]
+        pv = self._data.iloc[self._current_timestep,1]
+        electricity_price = self._data.iloc[self._current_timestep,2]
+        fuelmix = self._data.iloc[self._current_timestep,3]
 
         # load data for forecast
-        pv_forecast = self._load_pv_data.iloc[self._current_timestep+1 : self._current_timestep+5, 2].mean()
-        electricity_price_forecast = self._electricity_prices[self._current_timestep+1 : self._current_timestep+5].mean()
+        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5,2].mean()
 
         #Balance energy
         old_soe = self._soe

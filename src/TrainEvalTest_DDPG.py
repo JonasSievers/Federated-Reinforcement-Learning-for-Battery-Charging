@@ -8,13 +8,10 @@ from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
-from tf_agents.system.system_multiprocessing import multiprocessing_core
 import wandb
 
 import utils.dataloader as dataloader
-import utils.new_dataloader as new_dataloader
 import environments.battery as battery_env
-# import environments.household as household_env
 
 """
 Train and evaluate a DDPG agent
@@ -24,7 +21,7 @@ Train and evaluate a DDPG agent
 num_iterations = 5000
 customer = 1
 # Experiment
-experiment = "1_ex_1"
+experiment = "1_ex_2"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -52,7 +49,7 @@ num_test_episodes = 1
 eval_interval = 50
 
 # Load data
-train, eval, test = new_dataloader.getCustomerData('./data/load1011.csv','./data/load1112.csv','./data/load1213.csv','./data/price_wo_outlier.csv', customer)
+train, eval, test = dataloader.loadCustomerData(1)
 
 # Initiate env
 tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
