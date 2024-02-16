@@ -165,7 +165,7 @@ class Battery(py_environment.PyEnvironment):
         self._electricity_cost += profit - cost
 
         # Calculate reward
-        current_reward = profit - cost - battery_wear_cost
+        current_reward = 10 * (profit - cost) - battery_wear_cost
 
         observation = np.array([self._soe, load, pv, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
 
