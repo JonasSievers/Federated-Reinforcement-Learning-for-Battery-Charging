@@ -3,7 +3,7 @@ from tf_agents.agents import ddpg
 from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.drivers import dynamic_step_driver
 from tf_agents.environments import tf_py_environment
-from tf_agents.environments import batched_py_environment
+from tf_agents.environments.parallel_py_environment import ParallelPyEnvironment
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
@@ -18,10 +18,10 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 5000
+num_iterations = 3000
 customer = 1
 # Experiment
-experiment = "1_ex_2"
+experiment = "3_ex_6"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -40,7 +40,7 @@ critic_learning_rate = 1e-3
 dqda_clipping = None
 td_errors_loss_fn = tf.compat.v1.losses.huber_loss
 gamma = 0.99
-reward_scale_factor = 1.0
+reward_scale_factor = 10.0
 gradient_clipping = None
 
 # Params for eval and checkpoints
@@ -49,7 +49,7 @@ num_test_episodes = 1
 eval_interval = 50
 
 # Load data
-train, eval, test = dataloader.loadCustomerData(1)
+train, eval, test = dataloader.loadCustomerData("data/3final_data/combined_data_1.csv")
 
 # Initiate env
 tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
@@ -97,8 +97,6 @@ tf_agent.initialize()
 
 eval_policy = tf_agent.policy
 collect_policy = tf_agent.collect_policy
-
-print("Batch: ", tf_env_train.batch_size)
 
 replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
     tf_agent.collect_data_spec,
