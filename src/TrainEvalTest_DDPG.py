@@ -18,10 +18,10 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 3000
+num_iterations = 2000
 customer = 1
 # Experiment
-experiment = "3_ex_6"
+experiment = "3_ex_16"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -34,7 +34,7 @@ target_update_tau = 0.05
 target_update_period = 5
 
 # Params for train
-batch_size = 128
+batch_size = 64
 actor_learning_rate = 1e-4
 critic_learning_rate = 1e-3
 dqda_clipping = None

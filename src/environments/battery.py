@@ -47,13 +47,13 @@ class Battery(py_environment.PyEnvironment):
         self._episode_ended = False #Boolean flag indicating whether the current episode has ended.
         self._electricity_cost = 0.0 #Cumulative electricity cost incurred during the simulation.
         self._test = test #Boolean flag indicating whether the environment is in test mode.
-        self._feed_in_price = 0.02
+        self._feed_in_price = 0.024
 
         # Continuous action space battery=[-2.3,2.3]
         self._action_spec = array_spec.BoundedArraySpec(shape=(1,), dtype=np.float32, minimum=-self._power_battery/2, maximum=self._power_battery/2, name='action')
 
         # Observation space 
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(5,), dtype=np.float32, name='observation')
+        self._observation_spec = array_spec.BoundedArraySpec(shape=(9,), dtype=np.float32, name='observation')
 
         #Hold the load, PV, and electricity price data, respectively, passed during initialization.
         self._data = data
@@ -88,14 +88,15 @@ class Battery(py_environment.PyEnvironment):
         fuelmix = self._data.iloc[self._current_timestep,3]  
         net_load = load - pv
 
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3, 1].mean()
-        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3,2].mean()
+        # pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+7,2]
 
         self._soe = self._init_charge
         self._episode_ended = False
         self._electricity_cost = 0.0
 
-        observation = np.array([self._soe, net_load, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
+        observation = np.concatenate(([self._soe, net_load, electricity_price],electricity_price_forecast), dtype=np.float32)
+        
         return ts.restart(observation)
 
     """
@@ -126,8 +127,8 @@ class Battery(py_environment.PyEnvironment):
         net_load = load - pv
 
         # load data for forecast
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3, 1].mean()
-        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3,2].mean()
+        # pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+3, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+7,2]
 
         #Balance energy
         old_soe = self._soe
@@ -146,14 +147,11 @@ class Battery(py_environment.PyEnvironment):
             # Energy from grid needed
             if energy_management > 0:
                 energy_from_grid = energy_management
-                # Penalize battery charching with energy from grid
-                if battery_action > 0:
-                    penalty = np.clip(amount_charged_discharged - pv, a_min=0.0, a_max=amount_charged_discharged)
             # Feed in remaining energy
             else:
                 energy_feed_in = np.abs(energy_management)
                 # Penelize selling energy
-                penalty = energy_feed_in
+                penalty = energy_feed_in*10
         # Electricy price lower than feed in price
         else:
             # Discharge battery and sell everything
@@ -182,18 +180,17 @@ class Battery(py_environment.PyEnvironment):
         current_reward = (profit - cost) - battery_wear_cost - penalty
 
         # Create observation
-        observation = np.array([self._soe, net_load, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
+        observation = np.concatenate(([self._soe, net_load, electricity_price],electricity_price_forecast), dtype=np.float32)
 
         # Log test
         if self._test:
-            # wandb.log({'battery action': battery_action, 'soe': new_soe, 'energy leftover or missing': energy_leftover_missing})
             wandb.log({'battery action': battery_action, 'soe': new_soe})
 
         """
         If the last timeslot is reached and the maximum number of training days has been reached, 
         the episode is marked as ended. The method returns a termination TimeStep object.
         """
-        if self._current_timestep >= self._max_timesteps - 3:
+        if self._current_timestep >= self._max_timesteps - 7:
             self._episode_ended = True
             if self._test:
                 wandb.log({'profit': self._electricity_cost})           

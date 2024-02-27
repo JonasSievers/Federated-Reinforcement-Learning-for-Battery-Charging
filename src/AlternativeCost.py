@@ -18,7 +18,7 @@ for i in range(1,2):
         electricity_price = eval.iloc[timeslot,2]
         net_load = load - pv
         if net_load < 0:
-            cost += net_load * 0.02
+            cost += net_load * 0.024
         else:
             cost += net_load * electricity_price
         timeslot += 1
