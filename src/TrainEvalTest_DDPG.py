@@ -3,7 +3,6 @@ from tf_agents.agents import ddpg
 from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.drivers import dynamic_step_driver
 from tf_agents.environments import tf_py_environment
-from tf_agents.environments.parallel_py_environment import ParallelPyEnvironment
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
@@ -11,17 +10,17 @@ from tf_agents.utils import common
 import wandb
 
 import utils.dataloader as dataloader
-import environments.battery as battery_env
+from environments.EnergyManagementEnv import EnergyManagementEnv
 
 """
 Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 2000
+num_iterations = 5000
 customer = 1
 # Experiment
-experiment = "3_ex_16"
+experiment = "3_ex_20"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -49,11 +48,11 @@ num_test_episodes = 1
 eval_interval = 50
 
 # Load data
-train, eval, test = dataloader.loadCustomerData("data/3final_data/combined_data_1.csv")
+train, eval, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
-tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
-tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=eval))
+tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=train))
+tf_env_eval = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=eval))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -197,7 +196,7 @@ while global_step.numpy() < num_iterations:
     wandb.log(metrics)
 
 # Initiate test env
-tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=test, test=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=test, logging=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(

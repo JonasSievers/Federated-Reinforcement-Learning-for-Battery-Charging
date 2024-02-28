@@ -33,7 +33,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             capacity=13.5, #capacity of the battery in kWh
             power_battery=4.6, #power of the battery in kW
             power_grid=25.0, #power of the electricity grid in kW
-            logging=True
+            logging=False
         ):
  
         self._current_timestep = -1 #Tracks the current timeslot in the simulation.
@@ -47,13 +47,13 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._episode_ended = False #Boolean flag indicating whether the current episode has ended.
         self._electricity_cost = 0.0 #Cumulative electricity cost incurred during the simulation.
         self._logging = logging #Boolean flag indicating whether the environment is in test mode.
-        self._feed_in_price = 0.076
+        self._feed_in_price = 0.024
 
         # Continuous action space battery=[-2.3,2.3]
         self._action_spec = array_spec.BoundedArraySpec(shape=(1,), dtype=np.float32, minimum=-self._power_battery/2, maximum=self._power_battery/2, name='action')
 
         # Observation space [day,timeslot,soe,load,pv,price]
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(6,), dtype=np.float32, name='observation')
+        self._observation_spec = array_spec.BoundedArraySpec(shape=(9,), dtype=np.float32, name='observation')
         self._data = data #Data: load, PV, price, fuel mix
 
     def action_spec(self):
@@ -68,16 +68,17 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         load = self._data.iloc[self._current_timestep,0]
         pv = self._data.iloc[self._current_timestep,1]
         electricity_price = self._data.iloc[self._current_timestep,2]
-        fuelmix = self._data.iloc[self._current_timestep,3]
+        # fuelmix = self._data.iloc[self._current_timestep,3]
+        net_load = load - pv
 
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
-        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5,2].mean()
+        # pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+7,2]
 
         self._soe = self._init_charge
         self._episode_ended = False
         self._electricity_cost = 0.0
 
-        observation = np.array([self._soe, load, pv, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
+        observation = np.concatenate(([self._soe, net_load, electricity_price],electricity_price_forecast), dtype=np.float32)
         return ts.restart(observation)
 
     def _step(self, action):
@@ -92,10 +93,11 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         battery_action = action[0]
         load = self._data.iloc[self._current_timestep,0]
         pv = self._data.iloc[self._current_timestep,1]
+        net_load = load - pv
         electricity_price = self._data.iloc[self._current_timestep,2]
         #fuelmix = self._data.iloc[self._current_timestep,3]
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
-        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5,2].mean()
+        # pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+7,2]
 
         #Balance energy
         old_soe = self._soe
@@ -105,21 +107,27 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         new_soe = np.clip(old_soe + battery_action, a_min=0.0, a_max=self._capacity, dtype=np.float32)
         amount_charged_discharged = (new_soe - old_soe)
         self._soe = new_soe
+        
+        penalty = 0.0
 
-        # Stromkauf teuer
+        # Electricy price higher than feed in price
         if electricity_price >= self._feed_in_price:
-            energy_management = load - pv + amount_charged_discharged
-            # Noch mehr Strom benötigt
+            energy_management = net_load + amount_charged_discharged
+            # Energy from grid needed
             if energy_management > 0:
                 energy_from_grid = energy_management
-            # Strom übrig
+            # Feed in remaining energy
             else:
                 energy_feed_in = np.abs(energy_management)
-        # Stromkauf billig
+                # Penelize selling energy
+                penalty = energy_feed_in*10
+        # Electricy price lower than feed in price
         else:
+            # Discharge battery and sell everything
             if battery_action < 0:
                 energy_from_grid = load
-                energy_feed_in = pv + np.abs(amount_charged_discharged)
+                energy_feed_in = pv + np.abs(amount_charged_discharged) 
+            # Charge battery with energy from grid and feed in pv
             else:
                 energy_from_grid = load + amount_charged_discharged
                 energy_feed_in = pv
@@ -138,27 +146,25 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._electricity_cost += profit - cost
 
         # Calculate reward
-        reward = 10 * (profit - cost) - battery_wear_cost
+        reward = (profit - cost) - battery_wear_cost - penalty
 
-        observation = np.array([self._soe, load, pv, pv_forecast, electricity_price, electricity_price_forecast], dtype=np.float32)
+        observation = np.concatenate(([self._soe, net_load, electricity_price],electricity_price_forecast), dtype=np.float32)
 
         # Logging
-        if self._logging and self._current_timestep % 100 == 0:
+        if self._logging:
             wandb.log({
-            'Action [2.3, -2.3]': action[0], 
+            'Action [2.3, -2.3]': battery_action, 
             'SoE [0, 13.5]': self._soe, 
-            'Battery wear cost': battery_wear_cost ,
-            'Profit (+ profit, - cost)': profit,
-            'Total Profit': self._electricity_cost,
+            'Battery wear cost': battery_wear_cost,
+            'Profit (+ profit, - cost)': profit - cost,
             'Reward' : reward,
             'PV': pv, 
             'Load' : load, 
             'Price' : electricity_price
-            #'Current Timestep' : self._current_timestep,
             })
 
         # Check for episode end
-        if self._current_timestep >= self._max_timesteps - 5:
+        if self._current_timestep >= self._max_timesteps - 7:
             self._episode_ended = True
             if self._logging:
                 wandb.log({'profit': self._electricity_cost})           
