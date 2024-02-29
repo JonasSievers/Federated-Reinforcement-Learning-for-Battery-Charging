@@ -1,151 +1,84 @@
-import utils.dataloader as dataloader
-from IPython.display import display
-from enum import Enum
 import numpy as np
 
-class Price(Enum):
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
+import utils.dataloader as dataloader
 
 class Baseline:
-    def __init__(self, customer=1, battery_soe=0.0, battery_capacity=13.5, battery_power=4.6):
-        self.load_data, self.pv_data, self.price_data = dataloader.get_customer_data(dataloader.loadData('data/load1213.csv'), dataloader.loadPrice('data/price.csv'), customer)
-        self.customer = customer
+    def __init__(self, customer=1, battery_soe=0.0, battery_capacity=13.5, battery_power=4.6, feed_in_price=0.024):
+        self.train, self.eval, self.test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",customer)
+        self.customer = str(customer)
         self.battery_soe = battery_soe
         self.battery_capacity = battery_capacity
         self.battery_power = battery_power
-        self.current_price = 0
-        self.charge_discharge_amount = 1
-        
-    def percentileOverPastTimeslots(self, length, window, low_percentile, high_percentile):
-        low_price = np.percentile(window.iloc[0:length].squeeze(), low_percentile)
-        high_price = np.percentile(window.iloc[0:length].squeeze(), high_percentile)
-        return Price.HIGH if self.current_price > high_price else Price.LOW if self.current_price < low_price else Price.NORMAL
-    
-    def percentileOverFutureTimeslots(self, length, window, low_percentile, high_percentile):
-        low_price = np.percentile(window.iloc[0:length].squeeze(), low_percentile)
-        high_price = np.percentile(window.iloc[0:length].squeeze(), high_percentile)
-        return Price.HIGH if self.current_price > high_price else Price.LOW if self.current_price < low_price else Price.NORMAL
-    
-    def calculateBatteryEvents(self, timestep, price_status):
-        load = self.load_data.iloc[timestep,0]
-        pv = self.pv_data.iloc[timestep,0]
-        net_load = load - pv
-        cost = 0.0
-        profit = 0.0
-        used_power = 0.0
+        self.feed_in_price = feed_in_price
+        self.fixed_battery_action = 0.0
+        self.electricity_cost = 0.0
 
-        # Process the net load
-        # If positive energy needed, otherwise energy abundance
-        if net_load > 0:
-            match price_status:
-                case Price.LOW:
-                    # Take energy from grid
-                    cost = net_load * self.current_price
-                case Price.NORMAL:
-                    cost, used_power = self.dischargeBatteryNeed(net_load)
-                    pass
-                case Price.HIGH:
-                    # Take energy from battery
-                    cost, used_power = self.dischargeBatteryNeed(net_load)
-                    pass
+    def forecast_mean_fn(self, current_price, price_forecast):
+        if current_price > price_forecast:
+            return (- self.fixed_battery_action)
+        elif current_price < price_forecast:
+            return self.fixed_battery_action
         else:
-            match price_status:
-                case Price.LOW:
-                    # Store leftover energy
-                    profit, used_power = self.chargeBatteryLeftover(net_load)
-                    pass
-                case Price.NORMAL:
-                    # Store leftover energy
-                    profit, used_power = self.chargeBatteryLeftover(net_load)
-                    pass
-                case Price.HIGH:
-                    # Sell leftover energy
-                    profit = abs(net_load) * self.current_price * 0.7
-                    pass
+            return 0.0
 
-
-        if price_status == Price.LOW:
-            # Charge Battery
-            cost += self.chargeBatteryCheap(used_power)
-        if price_status == Price.HIGH:
-            # Discharge Battery
-            profit += self.dischargeBatteryExpensive(used_power)
- 
-        return profit-cost
-
-
-    def dischargeBatteryNeed(self, net_load):
-        cost = 0.0
-        # Discharge battery at most with maximum battery power
-        discharge = min(net_load, self.battery_power/2)
-        # More energy need then battery power can provide
-        if net_load > self.battery_power/2:
-            # Buy remaining energy from grid
-            cost += (net_load - self.battery_power/2) * self.current_price
-
-        new_battery_soe = self.battery_soe - discharge
-        # if battery is discharged below 0% => charge"back to 0%
-        if new_battery_soe < 0:
-            cost += abs(new_battery_soe) * self.current_price
-        clipped_soe = np.clip(new_battery_soe, a_min=0.0, a_max=self.battery_capacity)
-        used_power = abs(self.battery_soe-clipped_soe)
-        self.battery_soe = clipped_soe
-        return cost, used_power
     
-    def chargeBatteryLeftover(self, net_load):
-        profit = 0.0
-        production = abs(net_load)
-        charge = min(production, self.battery_power/2)
-        if production > self.battery_power/2:
-            profit += (production - self.battery_power/2) * self.current_price * 0.7
-        new_battery_soe = self.battery_soe + charge
-        # if battery is charged below 100% => discharge back to 100%
-        if new_battery_soe > self.battery_capacity:
-            profit += (new_battery_soe - self.battery_capacity) * self.current_price * 0.7
-        clipped_soe = np.clip(new_battery_soe, a_min=0.0, a_max=self.battery_capacity)
-        used_power = abs(self.battery_soe-clipped_soe)
-        self.battery_soe = clipped_soe
-        return profit, used_power
+    def main(self, fixed_battery_action, action_method):
+        
+        # Reset cost
+        self.electricity_cost = 0.0
+
+        self.fixed_battery_action = fixed_battery_action 
+        print(self.fixed_battery_action)
     
-    def chargeBatteryCheap(self, used_power):
-        max_charge = self.battery_capacity - self.battery_soe
-        power = self.battery_power/2 - used_power
-        charge = min(max_charge, power, self.charge_discharge_amount)
-        cost = charge * self.current_price
-        self.battery_soe = self.battery_soe + charge
-        return cost
+        for timeslot in range(0,17520):
+            # Load data
+            current_load =  self.test["load_"+self.customer].loc[timeslot]
+            current_pv =  self.test["pv_"+self.customer].loc[timeslot]
+            current_net_load = current_load - current_pv
+            current_price = self.test["price"].loc[timeslot]
+            price_forecast = self.test["price"].loc[timeslot+1:timeslot+7].mean()
 
-    def dischargeBatteryExpensive(self, used_power):
-        max_discharge = self.battery_soe
-        power = self.battery_power/2 - used_power
-        discharge = min(max_discharge, power, self.charge_discharge_amount)
-        profit = discharge * self.current_price * 0.7
-        self.battery_soe = self.battery_soe - discharge
-        return profit
+            # Decide whether charge or discharge on price forecast
+            battery_action = action_method(current_price,price_forecast)
+
+            # Calculate new SOE
+            old_soe = self.battery_soe
+            new_soe = np.clip(old_soe + battery_action, a_min=0.0, a_max=self.battery_capacity, dtype=np.float32)
+            amount_charged_discharged = (new_soe - old_soe)
+            self.battery_soe = new_soe
+            
+            # Initialize values
+            energy_from_grid = 0.0
+            energy_feed_in = 0.0  
+
+            # Electricy price higher than feed in price
+            if current_price >= self.feed_in_price:
+                energy_management = current_net_load + amount_charged_discharged
+                # Energy from grid needed
+                if energy_management > 0:
+                    energy_from_grid = energy_management
+                # Feed in remaining energy
+                else:
+                    energy_feed_in = np.abs(energy_management)
+            # Electricy price lower than feed in price
+            else:
+                # Discharge battery and sell everything
+                if battery_action < 0:
+                    energy_from_grid = current_load
+                    energy_feed_in = current_pv + np.abs(amount_charged_discharged) 
+                # Charge battery with energy from grid and feed in pv
+                else:
+                    energy_from_grid = current_load + amount_charged_discharged
+                    energy_feed_in = current_pv
+
+            cost = energy_from_grid * current_price
+            profit = energy_feed_in * self.feed_in_price
+            self.electricity_cost += profit - cost
+        
+        print(self.electricity_cost)
+        print("---------------------")
 
 
-    def slidingWindow(self, length, timestep):
-        shifted_price = self.price_data.reindex(index=np.roll(self.price_data.index,length-timestep))
-        return shifted_price.iloc[0:length].squeeze()
-
-    def main(self,method):
-        for i in np.arange(0.1,2.4,0.1):
-            cost = 0.0
-            self.charge_discharge_amount=i
-            for timestep in range(0,17520):
-                self.current_price = self.price_data.iloc[timestep,0].squeeze()
-                window = self.slidingWindow(24, timestep)
-                price_status = method(24,window,30,90)
-                value = self.calculateBatteryEvents(timestep, price_status)
-                cost += value
-            print(i)
-            print(cost)
-            print("----")
-
-# Programm
 baseline = Baseline()
-baseline.main(baseline.percentileOverPastTimeslots)
-
-#    TODO
+for battery_action in np.arange(0.1,2.4,0.1):
+    baseline.main(battery_action, baseline.forecast_mean_fn)
