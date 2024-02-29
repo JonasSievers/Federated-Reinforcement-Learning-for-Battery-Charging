@@ -20,7 +20,7 @@ Train and evaluate a DDPG agent
 num_iterations = 2000
 customer = 1
 # Experiment
-experiment = "3_ex_20"
+experiment = "3_ex_21"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000

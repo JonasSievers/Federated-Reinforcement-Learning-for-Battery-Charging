@@ -120,7 +120,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             else:
                 energy_feed_in = np.abs(energy_management)
                 # Penelize selling energy
-                penalty = energy_feed_in*10
+                penalty = energy_feed_in
         # Electricy price lower than feed in price
         else:
             # Discharge battery and sell everything
@@ -146,7 +146,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._electricity_cost += profit - cost
 
         # Calculate reward
-        reward = (profit - cost) - battery_wear_cost - penalty
+        reward = (profit - cost) - 5*battery_wear_cost - 15*penalty
 
         observation = np.concatenate(([self._soe, net_load, electricity_price],electricity_price_forecast), dtype=np.float32)
 
