@@ -17,7 +17,7 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 5000
+num_iterations = 2000
 customer = 1
 # Experiment
 experiment = "3_ex_20"
@@ -209,6 +209,6 @@ metrics = metric_utils.eager_compute(
     summary_prefix='',
     use_function=True)
 wandb.log(metrics)
-artifact.add_dir(local_path='checkpoints/ddpg/')
+artifact.add_dir(local_path='checkpoints/ddpg/'+experiment)
 wandb.log_artifact(artifact)
 wandb.finish()
