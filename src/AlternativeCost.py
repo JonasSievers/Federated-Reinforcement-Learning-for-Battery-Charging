@@ -20,7 +20,7 @@ for customer in range(1,2):
         electricity_price = test.iloc[timeslot,2]
         net_load = load - pv
         if net_load < 0:
-            cost += net_load * 0.024
+            cost += net_load * 0.076
         else:
             cost += net_load * electricity_price
         timeslot += 1

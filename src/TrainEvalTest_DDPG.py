@@ -17,16 +17,16 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 2000
+num_iterations = 5000
 customer = 1
 # Experiment
-experiment = "3_ex_21"
+experiment = "ex_23_0"
 # Params for collect
-initial_collect_steps = 1000
-collect_steps_per_iteration = 2000
-replay_buffer_capacity = 1000000
-ou_stddev = 0.2
-ou_damping = 0.15
+initial_collect_steps = 2048
+collect_steps_per_iteration = 1000
+replay_buffer_capacity = 1000000 
+ou_stddev = 0.9
+ou_damping = 0.3
 
 # Params for target update
 target_update_tau = 0.05
@@ -34,18 +34,18 @@ target_update_period = 5
 
 # Params for train
 batch_size = 64
-actor_learning_rate = 1e-4
-critic_learning_rate = 1e-3
+actor_learning_rate = 1e-3
+critic_learning_rate = 1e-2
 dqda_clipping = None
 td_errors_loss_fn = tf.compat.v1.losses.huber_loss
 gamma = 0.99
-reward_scale_factor = 10.0
+reward_scale_factor = 1.0
 gradient_clipping = None
 
 # Params for eval and checkpoints
 num_eval_episodes = 1
 num_test_episodes = 1
-eval_interval = 50
+eval_interval = 2000000
 
 # Load data
 train, eval, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
@@ -59,12 +59,12 @@ global_step = tf.compat.v1.train.get_or_create_global_step()
 
 actor_net = ddpg.actor_network.ActorNetwork(
     input_tensor_spec=tf_env_train.observation_spec(),
-    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
+    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(32, 32),
     activation_fn=tf.keras.activations.relu)
 
 critic_net = ddpg.critic_network.CriticNetwork(
     input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
-    joint_fc_layer_params=(400, 300),
+    joint_fc_layer_params=(32, 32),
     activation_fn=tf.keras.activations.relu)
 
 tf_agent = ddpg_agent.DdpgAgent(
@@ -119,10 +119,17 @@ collect_driver = dynamic_step_driver.DynamicStepDriver(
 
 wandb.login()
 wandb.init(
-    project="DDPG_battery",
+    project="DDPG",
     job_type="train_eval_test",
     name=experiment,
     config={
+        "initial_collect_steps": initial_collect_steps,
+        "collect_steps_per_iteration": collect_steps_per_iteration,
+        "replay_buffer_capacity": replay_buffer_capacity,
+        "ou_stddev": ou_stddev,
+        "ou_damping": ou_damping,
+        "target_update_tau": target_update_tau,
+        "target_update_period": target_update_period,
         "train_steps": num_iterations,
         "batch_size": batch_size,
         "actor_learning_rate": actor_learning_rate,
@@ -166,8 +173,8 @@ policy_state = collect_policy.get_initial_state(tf_env_train.batch_size)
 # Dataset generates trajectories with shape [Bx2x...]
 # pipeline which will feed data to the agent
 dataset = replay_buffer.as_dataset(
-    num_parallel_calls=3, sample_batch_size=batch_size, num_steps=2
-).prefetch(3)
+        num_parallel_calls=tf.data.experimental.AUTOTUNE, 
+        sample_batch_size=batch_size, num_steps=2).prefetch(tf.data.experimental.AUTOTUNE)
 iterator = iter(dataset)
 
 # Train and evaluate

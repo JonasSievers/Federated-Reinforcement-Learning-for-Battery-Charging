@@ -20,7 +20,7 @@ Train and evaluate a TD3 agent
 num_iterations = 2000
 customer = 1
 # Experiment
-experiment = "3_ex_20"
+experiment = "ex_03"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 2000
@@ -62,7 +62,7 @@ actor_net = ddpg.actor_network.ActorNetwork(input_tensor_spec=tf_env_train.obser
                                            output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
                                            activation_fn=tf.keras.activations.relu)
 
-critic_net = ddpg.critic_network.CriticNetwork(input_tensor_spec=(tf_env_train.observation_spec(), tf_env.action_spec()),
+critic_net = ddpg.critic_network.CriticNetwork(input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
                                               joint_fc_layer_params=(400, 300),
                                               activation_fn=tf.keras.activations.relu)
 
@@ -206,6 +206,6 @@ metrics = metric_utils.eager_compute(
     summary_prefix='',
     use_function=True)
 wandb.log(metrics)
-artifact.add_dir(local_path='checkpoints/ddpg/'+experiment)
+artifact.add_dir(local_path='checkpoints/td3/'+experiment)
 wandb.log_artifact(artifact)
 wandb.finish()
