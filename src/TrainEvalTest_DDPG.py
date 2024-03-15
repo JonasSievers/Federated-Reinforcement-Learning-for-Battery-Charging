@@ -135,7 +135,7 @@ wandb.init(
 
 artifact = wandb.Artifact(name='save', type="checkpoint")
 
-eval_metrics = [
+test_metrics = [
     tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=1)
 ]
 
