@@ -3,7 +3,6 @@ from tf_agents.agents import ddpg
 from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.drivers import dynamic_step_driver
 from tf_agents.environments import tf_py_environment
-from tf_agents.environments import batched_py_environment
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
@@ -11,23 +10,23 @@ from tf_agents.utils import common
 import wandb
 
 import utils.dataloader as dataloader
-import environments.battery as battery_env
+from environments.EnergyManagementEnv import EnergyManagementEnv
 
 """
 Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 5000
+num_iterations = 2000
 customer = 1
 # Experiment
-experiment = "1_ex_2"
+experiment = "ex_43_0"
 # Params for collect
-initial_collect_steps = 1000
-collect_steps_per_iteration = 2000
-replay_buffer_capacity = 1000000
-ou_stddev = 0.2
-ou_damping = 0.15
+initial_collect_steps = 2048
+collect_steps_per_iteration = 128
+replay_buffer_capacity = 20000 
+ou_stddev = 0.9
+ou_damping = 0.3
 
 # Params for target update
 target_update_tau = 0.05
@@ -35,8 +34,8 @@ target_update_period = 5
 
 # Params for train
 batch_size = 128
-actor_learning_rate = 1e-4
-critic_learning_rate = 1e-3
+actor_learning_rate = 1e-3
+critic_learning_rate = 1e-2
 dqda_clipping = None
 td_errors_loss_fn = tf.compat.v1.losses.huber_loss
 gamma = 0.99
@@ -44,28 +43,25 @@ reward_scale_factor = 1.0
 gradient_clipping = None
 
 # Params for eval and checkpoints
-num_eval_episodes = 1
 num_test_episodes = 1
-eval_interval = 50
 
 # Load data
-train, eval, test = dataloader.loadCustomerData(1)
+train, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
-tf_env_train = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=train))
-tf_env_eval = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=eval))
+tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=730, data=train))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
 
 actor_net = ddpg.actor_network.ActorNetwork(
     input_tensor_spec=tf_env_train.observation_spec(),
-    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
+    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(32, 32),
     activation_fn=tf.keras.activations.relu)
 
 critic_net = ddpg.critic_network.CriticNetwork(
     input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
-    joint_fc_layer_params=(400, 300),
+    joint_fc_layer_params=(32, 32),
     activation_fn=tf.keras.activations.relu)
 
 tf_agent = ddpg_agent.DdpgAgent(
@@ -98,8 +94,6 @@ tf_agent.initialize()
 eval_policy = tf_agent.policy
 collect_policy = tf_agent.collect_policy
 
-print("Batch: ", tf_env_train.batch_size)
-
 replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
     tf_agent.collect_data_spec,
     batch_size=tf_env_train.batch_size,
@@ -122,10 +116,17 @@ collect_driver = dynamic_step_driver.DynamicStepDriver(
 
 wandb.login()
 wandb.init(
-    project="DDPG_battery",
+    project="DDPG",
     job_type="train_eval_test",
     name=experiment,
     config={
+        "initial_collect_steps": initial_collect_steps,
+        "collect_steps_per_iteration": collect_steps_per_iteration,
+        "replay_buffer_capacity": replay_buffer_capacity,
+        "ou_stddev": ou_stddev,
+        "ou_damping": ou_damping,
+        "target_update_tau": target_update_tau,
+        "target_update_period": target_update_period,
         "train_steps": num_iterations,
         "batch_size": batch_size,
         "actor_learning_rate": actor_learning_rate,
@@ -134,12 +135,8 @@ wandb.init(
 
 artifact = wandb.Artifact(name='save', type="checkpoint")
 
-eval_metrics = [
-    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=num_eval_episodes)
-]
-
 test_metrics = [
-    tf_metrics.AverageReturnMetric(name="AverageReturnTest", buffer_size=num_eval_episodes)
+    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=1)
 ]
 
 train_checkpointer = common.Checkpointer(
@@ -169,8 +166,8 @@ policy_state = collect_policy.get_initial_state(tf_env_train.batch_size)
 # Dataset generates trajectories with shape [Bx2x...]
 # pipeline which will feed data to the agent
 dataset = replay_buffer.as_dataset(
-    num_parallel_calls=3, sample_batch_size=batch_size, num_steps=2
-).prefetch(3)
+        num_parallel_calls=tf.data.experimental.AUTOTUNE, 
+        sample_batch_size=batch_size, num_steps=2).prefetch(tf.data.experimental.AUTOTUNE)
 iterator = iter(dataset)
 
 # Train and evaluate
@@ -183,23 +180,12 @@ while global_step.numpy() < num_iterations:
     experience, _ = next(iterator)
     train_loss = tf_agent.train(experience)
     metrics = {}
-    if global_step.numpy() % eval_interval == 0:
-        train_checkpointer.save(global_step)
-        metrics = metric_utils.eager_compute(
-            eval_metrics,
-            tf_env_eval,
-            eval_policy,
-            num_episodes=num_eval_episodes,
-            train_step=global_step,
-            summary_writer=None,
-            summary_prefix='',
-            use_function=True)
-    
     metrics["loss"] = train_loss.loss
     wandb.log(metrics)
+train_checkpointer.save(global_step)
 
 # Initiate test env
-tf_env_test = tf_py_environment.TFPyEnvironment(battery_env.Battery(init_charge=0.0, data=test, test=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=366, data=test, logging=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(
@@ -212,6 +198,6 @@ metrics = metric_utils.eager_compute(
     summary_prefix='',
     use_function=True)
 wandb.log(metrics)
-artifact.add_dir(local_path='checkpoints/ddpg/')
+artifact.add_dir(local_path='checkpoints/ddpg/'+experiment)
 wandb.log_artifact(artifact)
 wandb.finish()
