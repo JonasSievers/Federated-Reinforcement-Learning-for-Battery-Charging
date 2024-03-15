@@ -8,8 +8,7 @@ def loadCustomerData(path, customer):
     user_data = energy_data[[f'load_{customer}', f'pv_{customer}', 'price', 'fuelmix']]
 
     # Split data
-    train = user_data[0:17520].set_index(pd.RangeIndex(0,17520))
-    eval = user_data[17520:35088].set_index(pd.RangeIndex(0,17568))
+    train = user_data[0:35088].set_index(pd.RangeIndex(0,35088))
     test = user_data[35088:52608].set_index(pd.RangeIndex(0,17520))
-    
-    return train, eval, test
+
+    return train, test

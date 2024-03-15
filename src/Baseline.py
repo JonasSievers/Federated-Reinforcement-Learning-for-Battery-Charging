@@ -41,7 +41,7 @@ class Baseline:
 
         self.fixed_battery_action = fixed_battery_action 
     
-        for timeslot in range(0,17520):
+        for timeslot in range(0,17568):
             # Load data
             p_load =  self.test["load_"+self.customer].loc[timeslot]
             p_pv =  self.test["pv_"+self.customer].loc[timeslot]

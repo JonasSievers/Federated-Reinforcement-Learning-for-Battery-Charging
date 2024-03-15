@@ -17,14 +17,14 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 5000
+num_iterations = 2000
 customer = 1
 # Experiment
-experiment = "ex_23_0"
+experiment = "ex_43_0"
 # Params for collect
 initial_collect_steps = 2048
-collect_steps_per_iteration = 1000
-replay_buffer_capacity = 1000000 
+collect_steps_per_iteration = 128
+replay_buffer_capacity = 20000 
 ou_stddev = 0.9
 ou_damping = 0.3
 
@@ -33,7 +33,7 @@ target_update_tau = 0.05
 target_update_period = 5
 
 # Params for train
-batch_size = 64
+batch_size = 128
 actor_learning_rate = 1e-3
 critic_learning_rate = 1e-2
 dqda_clipping = None
@@ -43,16 +43,13 @@ reward_scale_factor = 1.0
 gradient_clipping = None
 
 # Params for eval and checkpoints
-num_eval_episodes = 1
 num_test_episodes = 1
-eval_interval = 2000000
 
 # Load data
 train, eval, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
-tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=train))
-tf_env_eval = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=eval))
+tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=730, data=train))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -139,11 +136,7 @@ wandb.init(
 artifact = wandb.Artifact(name='save', type="checkpoint")
 
 eval_metrics = [
-    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=num_eval_episodes)
-]
-
-test_metrics = [
-    tf_metrics.AverageReturnMetric(name="AverageReturnTest", buffer_size=num_eval_episodes)
+    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=1)
 ]
 
 train_checkpointer = common.Checkpointer(
@@ -187,23 +180,12 @@ while global_step.numpy() < num_iterations:
     experience, _ = next(iterator)
     train_loss = tf_agent.train(experience)
     metrics = {}
-    if global_step.numpy() % eval_interval == 0:
-        train_checkpointer.save(global_step)
-        metrics = metric_utils.eager_compute(
-            eval_metrics,
-            tf_env_eval,
-            eval_policy,
-            num_episodes=num_eval_episodes,
-            train_step=global_step,
-            summary_writer=None,
-            summary_prefix='',
-            use_function=True)
-    
     metrics["loss"] = train_loss.loss
     wandb.log(metrics)
+train_checkpointer.save(global_step)
 
 # Initiate test env
-tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=test, logging=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=366, data=test, logging=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(
