@@ -46,7 +46,7 @@ gradient_clipping = None
 num_test_episodes = 1
 
 # Load data
-train, eval, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
+train, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
 tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=730, data=train))

@@ -87,7 +87,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         #Check for Episode termination to reset
         if self._episode_ended:
             return self.reset()
-        
+
         # 1. Balance Battery
         penalty_factor = 3
         soe_old = self._soe
@@ -105,7 +105,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             penalty_aging = 0 
 
         p_battery = soe_old - self._soe #Clipped to actual charging. + -> discharging/ providing energy
-
+        
         #2. Get data
         p_load = self._data.iloc[self._current_timestep, 0] 
         p_pv = self._data.iloc[self._current_timestep, 1] 
@@ -113,36 +113,32 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         #2.1 Get forecasts
         p_pv_forecast_1 = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean() # Mean of next 2 hours
         price_forecast_1 = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 2].mean() # Mean of next 2 hours
-
-
-        # Electricy price higher than feed in price
-        if price_buy >= self._feed_in_price:
+        
+        #3. Balance Grid
+        if price_buy >= self._feed_in_price: # Hoher Kaufpreis, daher Eigennutzung
             grid = p_load - p_pv - p_battery
-            # Energy from grid needed
             grid_buy = grid if grid > 0 else 0
             grid_sell = abs(grid) if grid < 0 else 0
-        # Electricy price lower than feed in price
-        else:
+        elif price_buy < self._feed_in_price: # Hoher Verkaufspreis, daher alles verkaufen
             if p_battery >= 0: #provide energy/ discharge
                 grid_buy = p_load
                 grid_sell = p_pv + p_battery
             else: 
-                grid_buy = p_load - p_battery
+                grid_buy = p_load -p_battery
                 grid_sell = p_pv
-                                
-                
+
         #4. Calculate profit
         cost = grid_buy*price_buy
         profit = grid_sell*self._feed_in_price
-        self._electricity_cost += profit - cost
-
+        self._electricity_cost += profit -cost
 
         #5. Calculate reward
         reward_scaling_factor = 5
         reward = (profit - cost)*reward_scaling_factor - penalty_soe - penalty_aging
 
+        #6. Create observation
         observation = np.array([self._soe, p_load, p_pv, p_pv_forecast_1, price_buy, price_forecast_1], dtype=np.float32)
-
+  
         # Logging
         if self._logging:
             wandb.log({
@@ -160,7 +156,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         if self._current_timestep >= self._max_timesteps - 5:
             self._episode_ended = True
             if self._logging:
-                wandb.log({'profit': self._electricity_cost})           
+                wandb.log({'Final Profit': self._electricity_cost})           
             return ts.termination(observation=observation,reward=reward)
         else:
             return ts.transition(observation=observation,reward=reward)
