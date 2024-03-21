@@ -22,7 +22,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
     :param capacity: capacity of the battery in kWh
     :param power_battery: power of the battery in kW
     :param power_grid: power of the electricity grid in kW
-    :param test: activates test logs
+    :param logging: activates test logs
     """
     def __init__(
             self, 
@@ -68,7 +68,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         load = self._data.iloc[self._current_timestep,0]
         pv = self._data.iloc[self._current_timestep,1]
         electricity_price = self._data.iloc[self._current_timestep,2]
-        fuelmix = self._data.iloc[self._current_timestep,3]
+        # fuelmix = self._data.iloc[self._current_timestep,3]
 
         pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5, 1].mean()
         electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+5,2].mean()
@@ -140,18 +140,16 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         observation = np.array([self._soe, p_load, p_pv, p_pv_forecast_1, price_buy, price_forecast_1], dtype=np.float32)
   
         # Logging
-        if self._logging and self._current_timestep % 100 == 0:
+        if self._logging:
             wandb.log({
             'Action [2.3, -2.3]': action[0], 
             'SoE [0, 13.5]': self._soe, 
-            'Battery wear cost': penalty_aging ,
-            'Profit (+ profit, - cost)': profit,
-            'Total Profit': self._electricity_cost,
+            'Battery wear cost': penalty_aging,
+            'Profit (+ profit, - cost)': profit - cost,
             'Reward' : reward,
             'PV': p_pv, 
             'Load' : p_load, 
             'Price' : price_buy
-            #'Current Timestep' : self._current_timestep,
             })
 
         # Check for episode end
