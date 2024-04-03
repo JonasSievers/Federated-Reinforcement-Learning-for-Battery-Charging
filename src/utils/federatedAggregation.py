@@ -27,8 +27,8 @@ class FederatedAggregation():
     
     #Momentum? Which update performed best
     #Baysian? Use Baysian inference
-    
-    def federated_average_aggregation(weights_list, noise=0.0, clipping=None, aggregation_method='mean'):
+
+    def federated_average_aggregation(weights_list, noise_stddev=0.0, clipping=None, aggregation_method='mean'):
         """
         This function averages the weights of models from different sources, optionally applies clipping to the
         averaged weights to control the influence of outliers, and adds Gaussian noise for differential privacy.
@@ -66,7 +66,7 @@ class FederatedAggregation():
                 raise ValueError("Unsupported aggregation method: {}".format(aggregation_method))
             
             #3. Adding noise
-            noise = tf.random.normal(shape=aggregated_weight.shape, mean=0.0, stddev=noise)
+            noise = tf.random.normal(shape=aggregated_weight.shape, mean=0.0, stddev=noise_stddev)
             aggregated_weight = aggregated_weight + noise
 
             aggregated_weights.append(aggregated_weight)
@@ -74,7 +74,7 @@ class FederatedAggregation():
         return aggregated_weights
     
 
-    def federated_weigthed_aggregation(weights_list, performance_metrics, aggregation_method='mean', clipping=None, noise_scale=0.0):
+    def federated_weigthed_aggregation(weights_list, performance_metrics, aggregation_method='mean', clipping=None, noise_stddev=0.0):
         """
         Performs federated weighted aggregation on a list of model weights, with various aggregation methods.
 
@@ -92,6 +92,9 @@ class FederatedAggregation():
         
         aggregated_weights = []
         performance_tensor = tf.convert_to_tensor(performance_metrics, dtype=tf.float32)
+        # Shift the performance metrics to ensure all are positive.
+        min_performance = tf.reduce_min(performance_tensor)
+        performance_tensor = performance_tensor - min_performance + 1
         
         #0. Normalize performance metric to get importance based on the aggregation
         if aggregation_method == 'mean': 
@@ -123,7 +126,7 @@ class FederatedAggregation():
             aggregated_weight = tf.reduce_sum(weight_tensor * performance_weights[:, tf.newaxis, tf.newaxis], axis=0)
 
             #3. Add noise
-            noise = tf.random.normal(shape=aggregated_weight.shape, mean=0.0, stddev=noise)
+            noise = tf.random.normal(shape=aggregated_weight.shape, mean=0.0, stddev=noise_stddev)
             aggregated_noisy_weight = aggregated_weight + noise
 
             aggregated_weights.append(aggregated_noisy_weight)
