@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
+import numpy as np
 
 def geometric_median(X, eps=1e-5):
     """
@@ -73,62 +74,60 @@ class FederatedAggregation():
 
         return aggregated_weights
     
-
     def federated_weigthed_aggregation(weights_list, performance_metrics, aggregation_method='mean', clipping=None, noise_stddev=0.0):
+        
         """
-        Performs federated weighted aggregation on a list of model weights, with various aggregation methods.
-
-        Args:
-            weights_list (list): A list of lists, where each inner list contains the weights (as numpy arrays or tensors)
-                                of an actor's network.
-            performance_metrics (list): A list of performance metrics corresponding to each set of weights.
-            aggregation_method (str): Method of aggregation - 'mean', 'median', 'geometric_median', 'softmax', 'top1', 'top2'.
-            clipping (float, optional): Clipping threshold for the L2 norm of the weights.
-            noise_scale (float, optional): Standard deviation of Gaussian noise added for privacy.
-
+        Aggregates weights from multiple models based on their performance metrics.
+        
+        Parameters:
+        - weights_list: List of lists, where each sublist contains the weights of a model.
+        - performance_metrics: List of metrics corresponding to the models' performances.
+        - aggregation_method: Method to use for aggregation. Supports 'mean' and 'weighted_mean'.
+        - clipping: Maximum norm for each weight vector. If None, no clipping is applied.
+        - noise_stddev: Standard deviation of Gaussian noise to be added for differential privacy. If 0, no noise is added.
+        
         Returns:
-            list: A list of tensors representing the aggregated weights.
+        - aggregated_weights: List of aggregated weights.
         """
-        
-        aggregated_weights = []
-        performance_tensor = tf.convert_to_tensor(performance_metrics, dtype=tf.float32)
-        # Shift the performance metrics to ensure all are positive.
-        min_performance = tf.reduce_min(performance_tensor)
-        performance_tensor = performance_tensor - min_performance + 1
-        
-        #0. Normalize performance metric to get importance based on the aggregation
-        if aggregation_method == 'mean': 
-            performance_weights = performance_tensor / tf.reduce_sum(performance_tensor)
+        performance_metrics_tensor = tf.convert_to_tensor(performance_metrics, dtype=tf.float32)
+        weights_list_tensor = [[tf.convert_to_tensor(layer) for layer in model] for model in weights_list]
+       
+        # Calulate the weights based on performance metrics and weighting method
+        if aggregation_method == 'mean':
+            offset = abs(min(performance_metrics)) + 1e-6
+            transformed_metrics = [metric + offset for metric in performance_metrics]
+            total_performance = sum(transformed_metrics)
+            performance_weights = [metric / total_performance for metric in transformed_metrics]
         elif aggregation_method == 'softmax':
-            performance_weights = tf.nn.softmax(performance_tensor)
-        elif aggregation_method == 'top_1':
-            top_k_values, top_k_indices = tf.nn.top_k(performance_tensor, k=1)
-            performance_weights = tf.one_hot(top_k_indices[0], depth=len(performance_metrics))
-            performance_weights /= tf.reduce_sum(performance_weights)
-        elif aggregation_method == "top_2":
-            top_k_values, top_k_indices = tf.nn.top_k(performance_tensor, k=2)
-            performance_weights = tf.reduce_sum(tf.one_hot(top_k_indices, depth=len(performance_metrics)), axis=0)
-            performance_weights /= tf.reduce_sum(performance_weights)  # Normalize weights
-        else:
-            raise ValueError("Unsupported aggregation method: {}".format(aggregation_method))
-            
-
-        #1. Align weights: Unpack weights_list and pair up the corresponding elements of each sublist
-        for weight_pair in zip(*weights_list):
-            
-            weight_tensor = tf.convert_to_tensor(weight_pair, dtype=tf.float32)
-            
-            #1. Apply clipping if threshold is specified           
-            if clipping is not None:
-                weight_tensor = tf.clip_by_norm(weight_tensor, clipping)
-
-            #2. Average weights
-            aggregated_weight = tf.reduce_sum(weight_tensor * performance_weights[:, tf.newaxis, tf.newaxis], axis=0)
-
-            #3. Add noise
-            noise = tf.random.normal(shape=aggregated_weight.shape, mean=0.0, stddev=noise_stddev)
-            aggregated_noisy_weight = aggregated_weight + noise
-
-            aggregated_weights.append(aggregated_noisy_weight)
+            performance_weights = tf.nn.softmax(performance_metrics_tensor)
+        elif aggregation_method == 'top1':
+            _, top_indices = tf.nn.top_k(performance_metrics_tensor, k=1)
+            performance_weights = tf.cast(tf.reduce_sum(tf.one_hot(top_indices, depth=tf.size(performance_metrics_tensor)), axis=0), tf.float32)
+        else: 
+            print("select an aggregation method from: mean, softmax, top1")
+            return
         
-        return aggregated_weights 
+        #Federated weighted aggregation for each layer
+        aggregated_weights = []
+        num_layers = len(weights_list[0])
+        for layer_idx in range(num_layers):
+            layer_weights = np.array([model[layer_idx] for model in weights_list_tensor])
+            
+            #1. Apply clipping if threshold is specified
+            if clipping is not None:
+                #norms = np.linalg.norm(layer_weights, axis=1, keepdims=True)
+                #desired = np.clip(norms, None, clipping)
+                #layer_weights = layer_weights * (desired / np.maximum(norms, 1e-16))
+                layer_weights = tf.clip_by_norm(layer_weights, clipping)
+            
+            #2. Average weights
+            weighted_sum = np.tensordot(performance_weights, layer_weights, axes=([0], [0]))
+                       
+            #3. Add noise
+            noise = tf.random.normal(shape=weighted_sum.shape, mean=0.0, stddev=noise_stddev)
+            weighted_sum += noise
+            
+            aggregated_weights.append(weighted_sum)
+        
+        return aggregated_weights
+            
