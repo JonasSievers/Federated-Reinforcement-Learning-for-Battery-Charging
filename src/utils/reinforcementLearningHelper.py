@@ -7,6 +7,15 @@ from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.utils import common
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.drivers import dynamic_step_driver
+from tf_agents.metrics import tf_metrics
+from tf_agents.eval import metric_utils
+
+from tf_agents.agents.ddpg import critic_network as ddpg_critic_network
+from tf_agents.networks import actor_distribution_network
+from tf_agents.agents.sac import sac_agent
+
+
+
 import wandb
 os.environ['WANDB_SILENT'] = 'true'
 os.environ['WANDB_CONSOLE'] = 'off'
@@ -41,6 +50,27 @@ def setup_energymanagement_environments(num_buildings=30, path_energy_data="../.
     else:
         return environments, observation_spec, action_spec
 
+def get_energy_dataset():
+    # Load data
+    price_df = pd.read_csv("../../data/1process_data/processed_price.csv", header=0)
+    fuel_df = pd.read_csv("../../data/1process_data/processed_fuelmix.csv", header=0)
+    pv_df = pd.read_csv("../../data/1process_data/2010-2013 PV_processed.csv", header=0)
+    totalload_df = pd.read_csv("../../data/1process_data/2010-2013 Totalload_processed.csv", header=0)
+    grossload_df = pd.read_csv("../../data/1process_data/2010-2013 Grossload_processed.csv", header=0)
+
+    #Rename
+    pv_df.columns = [col.replace('User', 'pv_') for col in pv_df.columns]
+    totalload_df.columns = [col.replace('User', 'load_') for col in totalload_df.columns]
+    grossload_df.columns = [col.replace('User', 'load_') for col in grossload_df.columns]
+    fuel_df.rename(columns={"0": 'Fuelmix'}, inplace=True)
+
+    #Concat to final df
+    final_df = pd.DataFrame()
+    final_df["price"] = price_df["Price"]
+    final_df["fuelmix"] = fuel_df["Fuelmix"]
+    final_df = pd.concat([final_df, totalload_df, pv_df], axis=1)
+
+    return final_df
   
 def initialize_ddpg_agent(observation_spec, action_spec, global_step, environments): 
     
@@ -172,3 +202,101 @@ def end_and_log_wandb(metrics, artifact):
     #artifact.add_dir(local_path='checkpoints/ddpg/')
     wandb.log_artifact(artifact)
     wandb.finish()
+
+def ddpg_training_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
+    tf_ddpg_agent, eval_policy, building_index, result_df, eval_interval, environments): 
+                    
+    eval_metrics = [tf_metrics.AverageReturnMetric()]
+    test_metrics = [tf_metrics.AverageReturnMetric()]
+
+    while global_step.numpy() < num_test_iterations:
+        
+        #Training
+        time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
+        experience, _ = next(iterator)
+        train_loss = tf_ddpg_agent.train(experience)
+
+        #Evaluation
+        metrics = {}
+        if global_step.numpy() % eval_interval == 0:
+            eval_metric = metric_utils.eager_compute(eval_metrics,environments["eval"][f"building_{building_index}"], eval_policy, train_step=global_step)
+        if global_step.numpy() % 2 == 0:
+            metrics["loss"] = train_loss.loss
+            wandb.log(metrics)
+    
+    #Testing
+    test_metrics = metric_utils.eager_compute(test_metrics,environments["test"][f"building_{building_index}"], eval_policy, train_step=global_step)
+    result_df = pd.concat([result_df, pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]]})], ignore_index=True)
+    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"])
+
+    return result_df, metrics
+
+def initialize_sac_agent(observation_spec, action_spec, global_step, environments):
+    # Actor Network
+    actor_net = actor_distribution_network.ActorDistributionNetwork(
+        observation_spec,
+        action_spec,
+        fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu)
+    
+    # Critic Network adapted from DDPG for SAC use
+    critic_net = ddpg_critic_network.CriticNetwork(
+        input_tensor_spec=(observation_spec, action_spec),
+        observation_fc_layer_params=None,
+        action_fc_layer_params=None,
+        joint_fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu,
+        output_activation_fn=tf.keras.activations.linear
+    )
+    
+    # SAC Agent Initialization
+    sac_tf_agent = sac_agent.SacAgent(
+        time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
+        action_spec=action_spec,
+        actor_network=actor_net,
+        critic_network=critic_net,
+        critic_network_2=critic_net.copy(),  # SAC typically uses two critic networks for stability
+        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        alpha_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        target_update_tau=0.005,
+        target_update_period=1,
+        td_errors_loss_fn=tf.math.squared_difference,
+        gamma=0.99,
+        reward_scale_factor=1.0,
+        train_step_counter=global_step,
+    )
+
+    sac_tf_agent.initialize()
+    eval_policy = sac_tf_agent.policy
+    collect_policy = sac_tf_agent.collect_policy
+
+    return sac_tf_agent, eval_policy, collect_policy
+
+def sac_training_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
+    tf_sac_agent, eval_policy, building_index, result_df, eval_interval, environments): 
+                    
+    eval_metrics = [tf_metrics.AverageReturnMetric()]
+    test_metrics = [tf_metrics.AverageReturnMetric()]
+
+    while global_step.numpy() < num_test_iterations:
+        
+        #Training
+        time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
+        experience, _ = next(iterator)
+        train_loss = tf_sac_agent.train(experience)
+
+        #Evaluation
+        metrics = {}
+        if global_step.numpy() % eval_interval == 0:
+            eval_metric = metric_utils.eager_compute(eval_metrics,environments["eval"][f"building_{building_index}"], eval_policy, train_step=global_step)
+        if global_step.numpy() % 2 == 0:
+            metrics["loss"] = train_loss.loss
+            wandb.log(metrics)
+    
+    #Testing
+    test_metrics = metric_utils.eager_compute(test_metrics,environments["test"][f"building_{building_index}"], eval_policy, train_step=global_step)
+    result_df = pd.concat([result_df, pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]]})], ignore_index=True)
+    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"])
+
+    return result_df, metrics

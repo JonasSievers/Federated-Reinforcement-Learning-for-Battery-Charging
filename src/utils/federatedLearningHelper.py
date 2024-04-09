@@ -79,31 +79,3 @@ def local_agent_training_and_evaluation(
     local_storage["target_critic_weights"].append(local_ddpg_agent._target_critic_network.get_weights())
 
     return  local_ddpg_agent, local_storage
-
-def agent_retraining_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
- tf_ddpg_agent, eval_policy, building_index, result_df, eval_interval, environments): 
-                    
-    eval_metrics = [tf_metrics.AverageReturnMetric()]
-    test_metrics = [tf_metrics.AverageReturnMetric()]
-
-    while global_step.numpy() < num_test_iterations:
-        
-        #Training
-        time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
-        experience, _ = next(iterator)
-        train_loss = tf_ddpg_agent.train(experience)
-
-        #Evaluation
-        metrics = {}
-        if global_step.numpy() % eval_interval == 0:
-            eval_metric = metric_utils.eager_compute(eval_metrics,environments["eval"][f"building_{building_index}"], eval_policy, train_step=global_step)
-        if global_step.numpy() % 2 == 0:
-            metrics["loss"] = train_loss.loss
-            wandb.log(metrics)
-    
-    #Testing
-    test_metrics = metric_utils.eager_compute(test_metrics,environments["test"][f"building_{building_index}"], eval_policy, train_step=global_step)
-    result_df = pd.concat([result_df, pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]]})], ignore_index=True)
-    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"])
-
-    return result_df, metrics
