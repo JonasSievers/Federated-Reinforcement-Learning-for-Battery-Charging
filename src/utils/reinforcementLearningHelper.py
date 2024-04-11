@@ -10,13 +10,17 @@ from tf_agents.drivers import dynamic_step_driver
 from tf_agents.metrics import tf_metrics
 from tf_agents.eval import metric_utils
 
+from tf_agents.agents.td3 import td3_agent
 from tf_agents.agents.ddpg import critic_network as ddpg_critic_network
 from tf_agents.networks import actor_distribution_network
 from tf_agents.agents.sac import sac_agent
-
+from tf_agents.agents.ppo import ppo_agent
+from tf_agents.networks import value_network
 
 
 import wandb
+import logging
+logging.getLogger("wandb").setLevel(logging.ERROR)
 os.environ['WANDB_SILENT'] = 'true'
 os.environ['WANDB_CONSOLE'] = 'off'
 
@@ -78,6 +82,8 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
         input_tensor_spec=observation_spec,
         output_tensor_spec=action_spec, 
         fc_layer_params=(256, 256),
+        #dropout_layer_params=(0.2),
+        #conv_layer_params=((32, 3, 1), (64, 3, 1)),
         activation_fn=tf.keras.activations.relu)
      
     critic_net = ddpg.critic_network.CriticNetwork(
@@ -124,6 +130,111 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
     collect_policy = ddpg_tf_agent.collect_policy
 
     return ddpg_tf_agent, eval_policy, collect_policy
+
+def initialize_sac_agent(observation_spec, action_spec, global_step, environments):
+    # Actor Network
+    actor_net = actor_distribution_network.ActorDistributionNetwork(
+        observation_spec,
+        action_spec,
+        fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu)
+    
+    # Critic Network adapted from DDPG for SAC use
+    critic_net = ddpg_critic_network.CriticNetwork(
+        input_tensor_spec=(observation_spec, action_spec),
+        observation_fc_layer_params=None,
+        action_fc_layer_params=None,
+        joint_fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu,
+        output_activation_fn=tf.keras.activations.linear
+    )
+    
+    # SAC Agent Initialization
+    sac_tf_agent = sac_agent.SacAgent(
+        time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
+        action_spec=action_spec,
+        actor_network=actor_net,
+        critic_network=critic_net,
+        critic_network_2=critic_net.copy(),  # SAC typically uses two critic networks for stability
+        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        alpha_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
+        target_update_tau=0.005,
+        target_update_period=1,
+        td_errors_loss_fn=tf.math.squared_difference,
+        gamma=0.99,
+        reward_scale_factor=1.0,
+        train_step_counter=global_step,
+    )
+
+    sac_tf_agent.initialize()
+    eval_policy = sac_tf_agent.policy
+    collect_policy = sac_tf_agent.collect_policy
+
+    return sac_tf_agent, eval_policy, collect_policy
+
+def initialize_td3_agent(observation_spec, action_spec, global_step, environments):
+    # Actor Network
+    actor_net = ddpg.actor_network.ActorNetwork(
+        input_tensor_spec=observation_spec, output_tensor_spec=action_spec,
+        fc_layer_params=(400, 300), activation_fn=tf.keras.activations.relu)
+
+    # Critic Network
+    critic_net = ddpg.critic_network.CriticNetwork(
+        input_tensor_spec=(observation_spec, action_spec),
+        joint_fc_layer_params=(400, 300), activation_fn=tf.keras.activations.relu)
+
+    # TD3 Agent Initialization
+    td3_tf_agent = td3_agent.Td3Agent(
+        time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
+        action_spec=action_spec,
+        actor_network=actor_net,
+        critic_network=critic_net,
+        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3),
+        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4),
+        target_update_tau=0.05,
+        target_update_period=100,
+        td_errors_loss_fn=tf.math.squared_difference,
+        gamma=0.99,
+        train_step_counter=global_step,
+    )
+
+    td3_tf_agent.initialize()
+    eval_policy = td3_tf_agent.policy
+    collect_policy = td3_tf_agent.collect_policy
+
+    return td3_tf_agent, eval_policy, collect_policy
+
+def initialize_ppo_agent(observation_spec, action_spec, global_step, environments):
+    
+    actor_net = actor_distribution_network.ActorDistributionNetwork(
+        observation_spec,
+        action_spec,
+        fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu,
+    )
+
+    value_net = value_network.ValueNetwork(
+        observation_spec,
+        fc_layer_params=(256, 256),
+        activation_fn=tf.keras.activations.relu,
+    )
+
+    tf_agent = ppo_agent.PPOAgent(
+        time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
+        action_spec=action_spec,
+        optimizer= tf.keras.optimizers.Adam(learning_rate=1e-3),
+        actor_net=actor_net,
+        value_net=value_net,
+        train_step_counter=global_step,
+        num_epochs=10,
+    )
+    
+    tf_agent.initialize()
+    eval_policy = tf_agent.policy
+    collect_policy = tf_agent.collect_policy
+
+    return tf_agent, eval_policy, collect_policy
 
 def setup_rl_training_pipeline(tf_agent, env_train, replay_buffer_capacity,collect_policy, initial_collect_steps, collect_steps_per_iteration, batch_size):
     
@@ -203,8 +314,8 @@ def end_and_log_wandb(metrics, artifact):
     wandb.log_artifact(artifact)
     wandb.finish()
 
-def ddpg_training_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
-    tf_ddpg_agent, eval_policy, building_index, result_df, eval_interval, environments): 
+def agent_training_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
+    tf_agent, eval_policy, building_index, result_df, eval_interval, environments): 
                     
     eval_metrics = [tf_metrics.AverageReturnMetric()]
     test_metrics = [tf_metrics.AverageReturnMetric()]
@@ -214,77 +325,7 @@ def ddpg_training_and_evaluation(global_step, num_test_iterations, collect_drive
         #Training
         time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
         experience, _ = next(iterator)
-        train_loss = tf_ddpg_agent.train(experience)
-
-        #Evaluation
-        metrics = {}
-        if global_step.numpy() % eval_interval == 0:
-            eval_metric = metric_utils.eager_compute(eval_metrics,environments["eval"][f"building_{building_index}"], eval_policy, train_step=global_step)
-        if global_step.numpy() % 2 == 0:
-            metrics["loss"] = train_loss.loss
-            wandb.log(metrics)
-    
-    #Testing
-    test_metrics = metric_utils.eager_compute(test_metrics,environments["test"][f"building_{building_index}"], eval_policy, train_step=global_step)
-    result_df = pd.concat([result_df, pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]]})], ignore_index=True)
-    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"])
-
-    return result_df, metrics
-
-def initialize_sac_agent(observation_spec, action_spec, global_step, environments):
-    # Actor Network
-    actor_net = actor_distribution_network.ActorDistributionNetwork(
-        observation_spec,
-        action_spec,
-        fc_layer_params=(256, 256),
-        activation_fn=tf.keras.activations.relu)
-    
-    # Critic Network adapted from DDPG for SAC use
-    critic_net = ddpg_critic_network.CriticNetwork(
-        input_tensor_spec=(observation_spec, action_spec),
-        observation_fc_layer_params=None,
-        action_fc_layer_params=None,
-        joint_fc_layer_params=(256, 256),
-        activation_fn=tf.keras.activations.relu,
-        output_activation_fn=tf.keras.activations.linear
-    )
-    
-    # SAC Agent Initialization
-    sac_tf_agent = sac_agent.SacAgent(
-        time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
-        action_spec=action_spec,
-        actor_network=actor_net,
-        critic_network=critic_net,
-        critic_network_2=critic_net.copy(),  # SAC typically uses two critic networks for stability
-        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        alpha_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        target_update_tau=0.005,
-        target_update_period=1,
-        td_errors_loss_fn=tf.math.squared_difference,
-        gamma=0.99,
-        reward_scale_factor=1.0,
-        train_step_counter=global_step,
-    )
-
-    sac_tf_agent.initialize()
-    eval_policy = sac_tf_agent.policy
-    collect_policy = sac_tf_agent.collect_policy
-
-    return sac_tf_agent, eval_policy, collect_policy
-
-def sac_training_and_evaluation(global_step, num_test_iterations, collect_driver, time_step, policy_state, iterator, 
-    tf_sac_agent, eval_policy, building_index, result_df, eval_interval, environments): 
-                    
-    eval_metrics = [tf_metrics.AverageReturnMetric()]
-    test_metrics = [tf_metrics.AverageReturnMetric()]
-
-    while global_step.numpy() < num_test_iterations:
-        
-        #Training
-        time_step, policy_state = collect_driver.run(time_step=time_step, policy_state=policy_state)
-        experience, _ = next(iterator)
-        train_loss = tf_sac_agent.train(experience)
+        train_loss = tf_agent.train(experience)
 
         #Evaluation
         metrics = {}
