@@ -28,23 +28,29 @@ import sys
 sys.path.insert(0, '..')
 from environments.EnergyManagementEnv import EnergyManagementEnv
 
-def setup_energymanagement_environments(num_buildings=30, path_energy_data="../../data/3final_data/Final_Energy_dataset.csv", return_dataset=False):
+def setup_energymanagement_environments(
+        num_buildings=30, 
+        path_energy_data="../../data/3final_data/Final_Energy_dataset.csv",
+        path_emission_data="../../data/3final_data/Emission_Intensity_dataset.csv",
+        return_dataset=False):
     
     energy_data = pd.read_csv(path_energy_data).fillna(0).set_index('Date')
-
+    emission_data = pd.read_csv(path_emission_data, index_col=0, parse_dates=True).fillna(0)
+    energy_data['emissions'] = emission_data['emissions'] 
+    
     dataset = {"train": {}, "eval": {}, "test": {}}
     environments = {"train": {}, "eval": {}, "test": {}}
    
     for idx in range(num_buildings):
-        user_data = energy_data[[f'load_{idx+1}', f'pv_{idx+1}', 'price', 'fuelmix']]
+        user_data = energy_data[[f'load_{idx+1}', f'pv_{idx+1}', 'price', 'emissions']]
         
         dataset["train"][f"building_{idx+1}"] = user_data[0:17520].set_index(pd.RangeIndex(0,17520))
         dataset["eval"][f"building_{idx+1}"] = user_data[17520:35088].set_index(pd.RangeIndex(0,17568))
         dataset["test"][f"building_{idx+1}"] = user_data[35088:52608].set_index(pd.RangeIndex(0,17520))
 
-        environments["train"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["train"][f"building_{idx+1}"]))
-        environments["eval"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["eval"][f"building_{idx+1}"]))
-        environments["test"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["test"][f"building_{idx+1}"], logging=True))
+        environments["train"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["train"][f"building_{idx+1}"], ecoPriority=0))
+        environments["eval"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["eval"][f"building_{idx+1}"], ecoPriority=0))
+        environments["test"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["test"][f"building_{idx+1}"], ecoPriority=0, logging=True))
 
     observation_spec = environments["train"][f"building_1"].observation_spec()
     action_spec = environments["train"][f"building_1"].action_spec()
@@ -86,6 +92,12 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
         #conv_layer_params=((32, 3, 1), (64, 3, 1)),
         activation_fn=tf.keras.activations.relu)
      
+    """critic_net = ddpg.critic_network.CriticNetwork(
+        input_tensor_spec=(observation_spec, action_spec),
+        observation_fc_layer_params=(256,),
+        joint_fc_layer_params=(256,),
+        activation_fn=tf.keras.activations.relu)"""
+    
     critic_net = ddpg.critic_network.CriticNetwork(
         input_tensor_spec=(observation_spec, action_spec),
         joint_fc_layer_params=(256, 256),
