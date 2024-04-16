@@ -33,6 +33,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             capacity=13.5, #capacity of the battery in kWh
             power_battery=4.6, #power of the battery in kW
             power_grid=25.0, #power of the electricity grid in kW
+            ecoPriority=0, #0 -> only consider cost for reward / 1 only consider emissions / 0.5 consider both equally
             logging=False
         ):
  
@@ -46,8 +47,10 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._power_grid = power_grid #Power of the electricity grid.
         self._episode_ended = False #Boolean flag indicating whether the current episode has ended.
         self._electricity_cost = 0.0 #Cumulative electricity cost incurred during the simulation.
+        self._total_emissions = 0.0 #Cumulative emissions incurred during the simulation
         self._logging = logging #Boolean flag indicating whether the environment is in test mode.
         self._feed_in_price = 0.076
+        self._ecoPriority = ecoPriority
 
         # Continuous action space battery=[-2.3,2.3]
         self._action_spec = array_spec.BoundedArraySpec(shape=(1,), dtype=np.float32, minimum=-self._power_battery/2, maximum=self._power_battery/2, name='action')
@@ -69,7 +72,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         p_pv = self._data.iloc[self._current_timestep,1]
         p_net_load = p_load - p_pv
         electricity_price = self._data.iloc[self._current_timestep,2]
-        # fuelmix = self._data.iloc[self._current_timestep,3]
+        grid_emissions = self._data.iloc[self._current_timestep,3]
 
         pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 1]
         electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25,2]
@@ -77,8 +80,9 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._soe = self._init_charge
         self._episode_ended = False
         self._electricity_cost = 0.0
+        self._total_emissions = 0.0
 
-        observation = np.concatenate(([self._soe, p_net_load, electricity_price], electricity_price_forecast, pv_forecast), dtype=np.float32)
+        observation = np.concatenate(([self._soe, p_net_load, grid_emissions, electricity_price], electricity_price_forecast, pv_forecast), dtype=np.float32)
         # observation = np.array([self._soe, p_net_load, electricity_price], dtype=np.float32)
         return ts.restart(observation)
 
@@ -113,6 +117,8 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         p_pv = self._data.iloc[self._current_timestep, 1] 
         p_net_load = p_load - p_pv
         electricity_price = self._data.iloc[self._current_timestep, 2]
+        grid_emissions = self._data.iloc[self._current_timestep, 3]
+
         #2.1 Get forecasts
         pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 1]
         price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 2]
@@ -127,12 +133,20 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         profit = grid_sell*self._feed_in_price
         self._electricity_cost += profit - cost
 
-        #5. Calculate reward
-        reward = (profit - cost) - penalty_soe - penalty_aging
+        #4.1 Calculate emissions
+        emissions = grid_buy*grid_emissions
+        self._total_emissions += emissions
+
+        emissions_penalty_factor = 0.05  # This value could be adjusted based on how severely you want to penalize emissions
+        emissions_impact = emissions * emissions_penalty_factor
+
+        reward_scaling_factor = 5
+        reward = ((profit - cost)*reward_scaling_factor)*(1-self._ecoPriority) - (self._ecoPriority * emissions_impact) - penalty_soe - penalty_aging
+        
+        self._ecoPriority
 
         #6. Create observation
-        observation = np.concatenate(([self._soe, p_net_load, electricity_price], price_forecast, pv_forecast), dtype=np.float32)
-        # observation = np.array([self._soe, p_net_load, electricity_price], dtype=np.float32)
+        observation = np.concatenate(([self._soe, p_net_load, grid_emissions, electricity_price], price_forecast, pv_forecast), dtype=np.float32)
   
         # Logging
         if self._logging:
@@ -145,14 +159,16 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             'PV': p_pv, 
             'Load' : p_load, 
             'Price' : electricity_price,
-            'Net load': p_net_load
+            'Net load': p_net_load,
+            'Emissions [kg]': emissions,
             })
 
         # Check for episode end
         if self._current_timestep >= self._max_timesteps - 25:
             self._episode_ended = True
             if self._logging:
-                wandb.log({'Final Profit': self._electricity_cost})           
+                wandb.log({'Final Profit': self._electricity_cost})
+                wandb.log({'Final Emissions': self._total_emissions})               
             return ts.termination(observation=observation,reward=reward)
         else:
             return ts.transition(observation=observation,reward=reward)
