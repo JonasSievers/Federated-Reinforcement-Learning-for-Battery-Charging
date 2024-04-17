@@ -17,10 +17,10 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 200000
+num_iterations = 50000
 customer = 1
 # Experiment
-experiment = "ex_215_0"
+experiment = "ex_300_0"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 1
