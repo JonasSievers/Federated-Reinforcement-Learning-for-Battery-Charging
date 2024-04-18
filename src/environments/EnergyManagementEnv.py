@@ -148,8 +148,6 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         #5. Calculate reward
         reward_scaling_factor = 5
         reward = ((profit - cost)*reward_scaling_factor)*(1-self._ecoPriority) - (self._ecoPriority * emissions_impact) - penalty_soe - penalty_aging
-        
-        self._ecoPriority
 
         #6. Create observation
         observation = np.array([self._soe, p_load, p_pv, p_pv_forecast_1, price_buy, price_forecast_1, grid_emissions], dtype=np.float32)
