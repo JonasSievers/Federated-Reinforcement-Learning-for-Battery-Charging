@@ -17,25 +17,25 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 2000
+num_iterations = 50000
 customer = 1
 # Experiment
-experiment = "ex_43_0"
+experiment = "ex_300_0"
 # Params for collect
-initial_collect_steps = 2048
-collect_steps_per_iteration = 128
-replay_buffer_capacity = 20000 
-ou_stddev = 0.9
-ou_damping = 0.3
+initial_collect_steps = 1000
+collect_steps_per_iteration = 1
+replay_buffer_capacity = 100000 
+ou_stddev = 0.2
+ou_damping = 0.15
 
 # Params for target update
 target_update_tau = 0.05
 target_update_period = 5
 
 # Params for train
-batch_size = 128
-actor_learning_rate = 1e-3
-critic_learning_rate = 1e-2
+batch_size = 64
+actor_learning_rate = 1e-4
+critic_learning_rate = 1e-3
 dqda_clipping = None
 td_errors_loss_fn = tf.compat.v1.losses.huber_loss
 gamma = 0.99
@@ -49,19 +49,20 @@ num_test_episodes = 1
 train, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
-tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=730, data=train))
+tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=731, data=train))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
 
 actor_net = ddpg.actor_network.ActorNetwork(
     input_tensor_spec=tf_env_train.observation_spec(),
-    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(32, 32),
+    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
     activation_fn=tf.keras.activations.relu)
 
 critic_net = ddpg.critic_network.CriticNetwork(
     input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
-    joint_fc_layer_params=(32, 32),
+    observation_fc_layer_params=(400,),
+    joint_fc_layer_params=(300,),
     activation_fn=tf.keras.activations.relu)
 
 tf_agent = ddpg_agent.DdpgAgent(
@@ -185,7 +186,7 @@ while global_step.numpy() < num_iterations:
 train_checkpointer.save(global_step)
 
 # Initiate test env
-tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=366, data=test, logging=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=365, data=test, logging=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(
