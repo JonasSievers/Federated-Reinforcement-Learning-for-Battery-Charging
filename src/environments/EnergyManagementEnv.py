@@ -56,7 +56,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         self._action_spec = array_spec.BoundedArraySpec(shape=(1,), dtype=np.float32, minimum=-self._power_battery/2, maximum=self._power_battery/2, name='action')
 
         # Observation space [day,timeslot,soe,load,pv,price]
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(52,), dtype=np.float32, name='observation')
+        self._observation_spec = array_spec.BoundedArraySpec(shape=(40,), dtype=np.float32, name='observation')
         self._data = data #Data: load, PV, price, fuel mix
 
     def action_spec(self):
@@ -74,8 +74,8 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         electricity_price = self._data.iloc[self._current_timestep,2]
         grid_emissions = self._data.iloc[self._current_timestep,3]
 
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 1]
-        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25,2]
+        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+19, 1]
+        electricity_price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+19,2]
 
         self._soe = self._init_charge
         self._episode_ended = False
@@ -120,8 +120,8 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
         grid_emissions = self._data.iloc[self._current_timestep, 3]
 
         #2.1 Get forecasts
-        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 1]
-        price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+25, 2]
+        pv_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+19, 1]
+        price_forecast = self._data.iloc[self._current_timestep+1 : self._current_timestep+19, 2]
         
         #3. Balance Grid
         grid = p_load - p_pv - p_battery
