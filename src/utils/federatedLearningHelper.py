@@ -4,6 +4,7 @@ import pandas as pd
 import wandb
 from tf_agents.metrics import tf_metrics
 from tf_agents.eval import metric_utils
+import pickle
 
 def load_clustered_buildings(num_clusters=10):
 
@@ -22,6 +23,28 @@ def load_clustered_buildings(num_clusters=10):
         buildings_in_cluster = np.where(cluster_data  == cluster_number)[0] +1
         clustered_buildings[cluster_number] = buildings_in_cluster
     
+    return clustered_buildings
+
+def prosumption_clustered_buildings(num_clusters=10):
+
+    # Catch non-clustered cluster sizes
+    if num_clusters < 2 or num_clusters > 20:
+        print("Currently, clustering has been done from cluster sizes within the range of 2 to 20.")
+        return
+
+    with open(f'../../data/3final_data/cluster_labels.pkl', 'rb') as file:
+        cluster_data = pickle.load(file)
+
+    # Retrieve cluster data from the provided dictionary
+    cluster_data = cluster_data[num_clusters]
+
+    # Iterate through each cluster
+    clustered_buildings = {i: [] for i in range(num_clusters)}
+    for cluster_number in range(num_clusters):
+        # Find indices of buildings in the current cluster
+        buildings_in_cluster = np.where(cluster_data == cluster_number)[0] + 1
+        clustered_buildings[cluster_number] = buildings_in_cluster
+
     return clustered_buildings
 
 def save_ddpg_weights(global_tf_agent, model_dir):

@@ -162,7 +162,7 @@ class EnergyManagementEnv(py_environment.PyEnvironment):
             })
 
         # Check for episode end
-        if self._current_timestep >= self._max_timesteps - 25:
+        if self._current_timestep >= self._max_timesteps - 13:
             self._episode_ended = True
             if self._logging:
                 wandb.log({'Final Profit': self._electricity_cost})
