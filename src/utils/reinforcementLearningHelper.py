@@ -105,12 +105,13 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
 
     target_actor_network = ddpg.actor_network.ActorNetwork(
         input_tensor_spec=observation_spec,
-        output_tensor_spec=action_spec, fc_layer_params=(256, 256),
+        output_tensor_spec=action_spec, fc_layer_params=(400, 300),
         activation_fn=tf.keras.activations.relu)
 
     target_critic_network = ddpg.critic_network.CriticNetwork(
         input_tensor_spec=(observation_spec, action_spec),
-        joint_fc_layer_params=(256, 256),
+        observation_fc_layer_params=(400,),
+        joint_fc_layer_params=(300,),
         activation_fn=tf.keras.activations.relu)
     
 
@@ -127,7 +128,7 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
         "target_critic_network": target_critic_network,
         "target_update_tau": 0.05,
         "target_update_period": 5, #100,
-        "dqda_clipping": 0.5,
+        "dqda_clipping": None,
         "td_errors_loss_fn": tf.compat.v1.losses.huber_loss,
         "gamma": 0.99, #1
         "reward_scale_factor": 1,
