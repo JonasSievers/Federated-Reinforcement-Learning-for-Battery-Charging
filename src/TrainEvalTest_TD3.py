@@ -17,11 +17,11 @@ Train and evaluate a TD3 agent
 """
 
 # Param for iteration
-num_iterations = 50000
+num_iterations = 40000
 customer = 1
 
 # Experiment
-experiment = "ex_06"
+experiment = "ex_08"
 
 # Params for collect
 initial_collect_steps = 1000
@@ -45,7 +45,6 @@ gradient_clipping = None
 # Params for eval and checkpoints
 num_eval_episodes = 1
 num_test_episodes = 1
-eval_interval = 50
 
 train, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
