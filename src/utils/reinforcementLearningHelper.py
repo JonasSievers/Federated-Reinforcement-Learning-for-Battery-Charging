@@ -195,7 +195,9 @@ def initialize_td3_agent(observation_spec, action_spec, global_step, environment
     # Critic Network
     critic_net = ddpg.critic_network.CriticNetwork(
         input_tensor_spec=(observation_spec, action_spec),
-        joint_fc_layer_params=(400, 300), activation_fn=tf.keras.activations.relu)
+        observation_fc_layer_params=(400,),
+        joint_fc_layer_params=(300,),
+        activation_fn=tf.keras.activations.relu)
 
     # TD3 Agent Initialization
     td3_tf_agent = td3_agent.Td3Agent(

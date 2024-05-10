@@ -17,54 +17,53 @@ Train and evaluate a TD3 agent
 """
 
 # Param for iteration
-num_iterations = 2000
+num_iterations = 40000
 customer = 1
+
 # Experiment
-experiment = "ex_03"
+experiment = "ex_08"
+
 # Params for collect
 initial_collect_steps = 1000
-collect_steps_per_iteration = 2000
-replay_buffer_capacity = 1000000
-ou_stddev = 0.2
-ou_damping = 0.15
-
-# Params for target update
-target_update_tau = 0.05
-target_update_period = 5
+collect_steps_per_iteration = 1
+replay_buffer_capacity = 100000 
 
 # Params for train
 batch_size = 64
 exploration_noise_std = 0.1
+target_update_tau = 0.05
+target_update_period = 5
 actor_update_period = 2
 actor_learning_rate = 1e-4
 critic_learning_rate = 1e-3
 dqda_clipping = None
 td_errors_loss_fn = tf.compat.v1.losses.huber_loss
-gamma = 0.99
+gamma = 0.995
 reward_scale_factor = 1.0
 gradient_clipping = None
 
 # Params for eval and checkpoints
 num_eval_episodes = 1
 num_test_episodes = 1
-eval_interval = 50
 
-train, eval, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
+train, test = dataloader.loadCustomerData("data/3final_data/Final_Energy_dataset.csv",1)
 
 # Initiate env
-tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=train))
-tf_env_eval = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=eval))
+tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=731, data=train))
 
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
 
-actor_net = ddpg.actor_network.ActorNetwork(input_tensor_spec=tf_env_train.observation_spec(),
-                                           output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
-                                           activation_fn=tf.keras.activations.relu)
+actor_net = ddpg.actor_network.ActorNetwork(
+    input_tensor_spec=tf_env_train.observation_spec(),
+    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
+    activation_fn=tf.keras.activations.relu)
 
-critic_net = ddpg.critic_network.CriticNetwork(input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
-                                              joint_fc_layer_params=(400, 300),
-                                              activation_fn=tf.keras.activations.relu)
+critic_net = ddpg.critic_network.CriticNetwork(
+    input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
+    observation_fc_layer_params=(400,),
+    joint_fc_layer_params=(300,),
+    activation_fn=tf.keras.activations.relu)
 
 tf_agent = td3_agent.Td3Agent(
     tf_env_train.time_step_spec(),
@@ -117,10 +116,17 @@ collect_driver = dynamic_step_driver.DynamicStepDriver(
 
 wandb.login()
 wandb.init(
-    project="TD3_battery",
+    project="TD3",
     job_type="train_eval_test",
     name=experiment,
     config={
+        "initial_collect_steps": initial_collect_steps,
+        "collect_steps_per_iteration": collect_steps_per_iteration,
+        "replay_buffer_capacity": replay_buffer_capacity,
+        "exploration_noise_std": exploration_noise_std,
+        "target_update_tau": target_update_tau,
+        "target_update_period": target_update_period,
+        "actor_update_period": actor_update_period,
         "train_steps": num_iterations,
         "batch_size": batch_size,
         "actor_learning_rate": actor_learning_rate,
@@ -128,10 +134,6 @@ wandb.init(
 )
 
 artifact = wandb.Artifact(name='save', type="checkpoint")
-
-eval_metrics = [
-    tf_metrics.AverageReturnMetric(name="AverageReturnEvaluation", buffer_size=num_eval_episodes)
-]
 
 test_metrics = [
     tf_metrics.AverageReturnMetric(name="AverageReturnTest", buffer_size=num_eval_episodes)
@@ -164,8 +166,8 @@ policy_state = collect_policy.get_initial_state(tf_env_train.batch_size)
 # Dataset generates trajectories with shape [Bx2x...]
 # pipeline which will feed data to the agent
 dataset = replay_buffer.as_dataset(
-    num_parallel_calls=3, sample_batch_size=batch_size, num_steps=2
-).prefetch(3)
+        num_parallel_calls=tf.data.experimental.AUTOTUNE, 
+        sample_batch_size=batch_size, num_steps=2).prefetch(tf.data.experimental.AUTOTUNE)
 iterator = iter(dataset)
 
 print("Start training ...")
@@ -177,23 +179,12 @@ while global_step.numpy() < num_iterations:
     experience, _ = next(iterator)
     train_loss = tf_agent.train(experience)
     metrics = {}
-    if global_step.numpy() % eval_interval == 0:
-        train_checkpointer.save(global_step)
-        metrics = metric_utils.eager_compute(
-            eval_metrics,
-            tf_env_eval,
-            eval_policy,
-            num_episodes=num_eval_episodes,
-            train_step=global_step,
-            summary_writer=None,
-            summary_prefix='',
-            use_function=True)
-    
     metrics["loss"] = train_loss.loss
     wandb.log(metrics)
+train_checkpointer.save(global_step)
 
 # Initiate test env
-tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=test, logging=True))
+tf_env_test = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, days=365, data=test, logging=True))
 
 print("Start testing ...")
 metrics = metric_utils.eager_compute(

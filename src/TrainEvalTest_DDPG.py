@@ -8,8 +8,10 @@ from tf_agents.metrics import tf_metrics
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.utils import common
 import wandb
+import sys
 
 import utils.dataloader as dataloader
+import utils.customNetworks as customNetworks
 from environments.EnergyManagementEnv import EnergyManagementEnv
 
 """
@@ -17,10 +19,10 @@ Train and evaluate a DDPG agent
 """
 
 # Param for iteration
-num_iterations = 50000
+num_iterations = 40000
 customer = 1
 # Experiment
-experiment = "ex_300_0"
+experiment = "ex_rnn"
 # Params for collect
 initial_collect_steps = 1000
 collect_steps_per_iteration = 1
@@ -54,20 +56,40 @@ tf_env_train = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge
 # Prepare runner
 global_step = tf.compat.v1.train.get_or_create_global_step()
 
-actor_net = ddpg.actor_network.ActorNetwork(
-    input_tensor_spec=tf_env_train.observation_spec(),
-    output_tensor_spec=tf_env_train.action_spec(), fc_layer_params=(400, 300),
-    activation_fn=tf.keras.activations.relu)
+# Normal ANN
+# actor_net = ddpg.actor_network.ActorNetwork(
+#     input_tensor_spec=tf_env_train.observation_spec(),
+#     output_tensor_spec=tf_env_train.action_spec(), 
+#     fc_layer_params=(400, 300),
+#     activation_fn=tf.keras.activations.relu)
 
-critic_net = ddpg.critic_network.CriticNetwork(
+
+# critic_net = ddpg.critic_network.CriticNetwork(
+#     input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
+#     observation_fc_layer_params=(400,),
+#     joint_fc_layer_params=(300,),
+#     activation_fn=tf.keras.activations.relu)
+
+# RNN
+actor_net = ddpg.actor_rnn_network.ActorRnnNetwork(
+    input_tensor_spec=tf_env_train.observation_spec(),
+    output_tensor_spec=tf_env_train.action_spec(),
+    input_fc_layer_params=(1,1),
+    lstm_size=(1,),
+    output_fc_layer_params=(1,1))
+
+critic_net = ddpg.critic_rnn_network.CriticRnnNetwork(
     input_tensor_spec=(tf_env_train.observation_spec(), tf_env_train.action_spec()),
-    observation_fc_layer_params=(400,),
-    joint_fc_layer_params=(300,),
-    activation_fn=tf.keras.activations.relu)
+    observation_fc_layer_params=(1,),
+    action_fc_layer_params=None,
+    joint_fc_layer_params=(1,),
+    lstm_size=(1,),
+    output_fc_layer_params=(1,1)
+)
 
 tf_agent = ddpg_agent.DdpgAgent(
-    tf_env_train.time_step_spec(),
-    tf_env_train.action_spec(),
+    time_step_spec=tf_env_train.time_step_spec(),
+    action_spec=tf_env_train.action_spec(),
     actor_network=actor_net,
     critic_network=critic_net,
     actor_optimizer=tf.compat.v1.train.AdamOptimizer(
