@@ -27,16 +27,21 @@ os.environ['WANDB_CONSOLE'] = 'off'
 import sys
 sys.path.insert(0, '..')
 from environments.EnergyManagementEnv import EnergyManagementEnv
+from environments.EnergyManagementEnv2 import EnergyManagementEnv2
 
 def setup_energymanagement_environments(
         num_buildings=30, 
         path_energy_data="../../data/3final_data/Final_Energy_dataset.csv",
-        path_emission_data="../../data/3final_data/Emission_Intensity_dataset.csv",
-        return_dataset=False):
+        return_dataset=False,
+        ecoPriority=0,
+        noise_scale=0):
     
     energy_data = pd.read_csv(path_energy_data).fillna(0).set_index('Date')
-    #emission_data = pd.read_csv(path_emission_data, index_col=0, parse_dates=True).fillna(0)
-    #energy_data['emissions'] = emission_data['emissions'] 
+
+    if noise_scale == 0:
+        noise = 0
+    else: 
+        noise = tf.random.normal(shape=[18], mean=0.0, stddev=noise_scale, dtype=tf.float16)
     
     dataset = {"train": {}, "eval": {}, "test": {}}
     environments = {"train": {}, "eval": {}, "test": {}}
@@ -48,12 +53,85 @@ def setup_energymanagement_environments(
         dataset["eval"][f"building_{idx+1}"] = user_data[17520:35088].set_index(pd.RangeIndex(0,17568))
         dataset["test"][f"building_{idx+1}"] = user_data[35088:52608].set_index(pd.RangeIndex(0,17520))
 
-        environments["train"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["train"][f"building_{idx+1}"], ecoPriority=0))
-        environments["eval"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["eval"][f"building_{idx+1}"], ecoPriority=0))
-        environments["test"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["test"][f"building_{idx+1}"], ecoPriority=0, logging=True))
+        environments["train"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["train"][f"building_{idx+1}"], ecoPriority=ecoPriority, noise=noise))
+        environments["eval"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["eval"][f"building_{idx+1}"], ecoPriority=ecoPriority, noise=noise))
+        environments["test"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv(init_charge=0.0, data=dataset["test"][f"building_{idx+1}"], ecoPriority=ecoPriority, logging=True, noise=noise))
 
     observation_spec = environments["train"][f"building_1"].observation_spec()
     action_spec = environments["train"][f"building_1"].action_spec()
+
+    if return_dataset:
+        return environments, observation_spec, action_spec, dataset
+    else:
+        return environments, observation_spec, action_spec
+    
+def setup_energymanagement_environments2(
+        num_buildings=30, 
+        path_energy_data="../../data/3final_data/Final_Energy_dataset.csv",
+        return_dataset=False, 
+        ecoPriority=0,
+        noise_scale=0):
+    
+    energy_data = pd.read_csv(path_energy_data).fillna(0).set_index('Date')
+
+    if noise_scale == 0:
+        noise = 0
+    else: 
+        noise = tf.random.normal(shape=[18], mean=0.0, stddev=noise_scale, dtype=tf.float16)
+    
+    dataset = {"train": {}, "eval": {}, "test": {}}
+    environments = {"train": {}, "eval": {}, "test": {}}
+   
+    for idx in range(num_buildings):
+        user_data = energy_data[[f'load_{idx+1}', f'pv_{idx+1}', 'price', 'emissions']]
+        
+        dataset["train"][f"building_{idx+1}"] = user_data[0:17520].set_index(pd.RangeIndex(0,17520))
+        dataset["eval"][f"building_{idx+1}"] = user_data[17520:35088].set_index(pd.RangeIndex(0,17568))
+        dataset["test"][f"building_{idx+1}"] = user_data[35088:52608].set_index(pd.RangeIndex(0,17520))
+
+        environments["train"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["train"][f"building_{idx+1}"], ecoPriority=ecoPriority, noise=noise))
+        environments["eval"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["eval"][f"building_{idx+1}"], ecoPriority=ecoPriority, noise=noise))
+        environments["test"][f"building_{idx+1}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["test"][f"building_{idx+1}"], ecoPriority=ecoPriority, logging=True, noise=noise))
+
+    observation_spec = environments["train"][f"building_1"].observation_spec()
+    action_spec = environments["train"][f"building_1"].action_spec()
+
+    if return_dataset:
+        return environments, observation_spec, action_spec, dataset
+    else:
+        return environments, observation_spec, action_spec
+    
+def setup_energymanagement_environments_for_zeroShot(
+        num_buildings=30, 
+        path_energy_data="../../data/3final_data/Final_Energy_dataset.csv",
+        return_dataset=False,
+        ecoPriority=0,
+        noise_scale=0, 
+        first_building=31):
+    
+    energy_data = pd.read_csv(path_energy_data).fillna(0).set_index('Date')
+
+    if noise_scale == 0:
+        noise = 0
+    else: 
+        noise = tf.random.normal(shape=[18], mean=0.0, stddev=noise_scale, dtype=tf.float16)
+    
+    dataset = {"train": {}, "eval": {}, "test": {}}
+    environments = {"train": {}, "eval": {}, "test": {}}
+   
+    for idx in range(num_buildings):
+        user_data = energy_data[[f'load_{first_building+idx}', f'pv_{first_building+idx}', 'price', 'emissions']]
+        
+        dataset["train"][f"building_{first_building+idx}"] = user_data[0:17520].set_index(pd.RangeIndex(0,17520))
+        dataset["eval"][f"building_{first_building+idx}"] = user_data[17520:35088].set_index(pd.RangeIndex(0,17568))
+        dataset["test"][f"building_{first_building+idx}"] = user_data[35088:52608].set_index(pd.RangeIndex(0,17520))
+
+        environments["train"][f"building_{first_building+idx}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["train"][f"building_{first_building+idx}"], ecoPriority=ecoPriority, noise=noise))
+        environments["eval"][f"building_{first_building+idx}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["eval"][f"building_{first_building+idx}"], ecoPriority=ecoPriority, noise=noise))
+        environments["test"][f"building_{first_building+idx}"] = tf_py_environment.TFPyEnvironment(EnergyManagementEnv2(init_charge=0.0, data=dataset["test"][f"building_{first_building+idx}"], ecoPriority=ecoPriority, logging=True, noise=noise))
+
+    observation_spec = environments["train"][f"building_{first_building}"].observation_spec()
+    action_spec = environments["train"][f"building_{first_building}"].action_spec()
 
     if return_dataset:
         return environments, observation_spec, action_spec, dataset
@@ -82,14 +160,12 @@ def get_energy_dataset():
 
     return final_df
   
-def initialize_ddpg_agent(observation_spec, action_spec, global_step, environments): 
+def initialize_ddpg_agent(observation_spec, action_spec, global_step, environments, first_building=1): 
     
     actor_net = ddpg.actor_network.ActorNetwork(
         input_tensor_spec=observation_spec,
         output_tensor_spec=action_spec, 
         fc_layer_params=(400, 300),
-        #dropout_layer_params=(0.2),
-        #conv_layer_params=((32, 3, 1), (64, 3, 1)),
         activation_fn=tf.keras.activations.relu)
      
     critic_net = ddpg.critic_network.CriticNetwork(
@@ -98,14 +174,10 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
         joint_fc_layer_params=(300,),
         activation_fn=tf.keras.activations.relu)
     
-    """critic_net = ddpg.critic_network.CriticNetwork(
-        input_tensor_spec=(observation_spec, action_spec),
-        joint_fc_layer_params=(400, 300),
-        activation_fn=tf.keras.activations.relu)"""
-
     target_actor_network = ddpg.actor_network.ActorNetwork(
         input_tensor_spec=observation_spec,
-        output_tensor_spec=action_spec, fc_layer_params=(400, 300),
+        output_tensor_spec=action_spec, 
+        fc_layer_params=(400, 300),
         activation_fn=tf.keras.activations.relu)
 
     target_critic_network = ddpg.critic_network.CriticNetwork(
@@ -116,21 +188,21 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
     
 
     agent_params = {
-        "time_step_spec": environments["train"][f"building_{1}"].time_step_spec(),
-        "action_spec": environments["train"][f"building_{1}"].action_spec(),
+        "time_step_spec": environments["train"][f"building_{first_building}"].time_step_spec(),
+        "action_spec": environments["train"][f"building_{first_building}"].action_spec(),
         "actor_network": actor_net,
         "critic_network": critic_net,
-        "actor_optimizer": tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4), #1e-3
-        "critic_optimizer": tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3), #1e-2
-        "ou_stddev": 0.2, #0.9,
+        "actor_optimizer": tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4), 
+        "critic_optimizer": tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3), 
+        "ou_stddev": 0.2,
         "ou_damping": 0.15,
         "target_actor_network": target_actor_network,
         "target_critic_network": target_critic_network,
         "target_update_tau": 0.05,
-        "target_update_period": 5, #100,
+        "target_update_period": 5,
         "dqda_clipping": None,
         "td_errors_loss_fn": tf.compat.v1.losses.huber_loss,
-        "gamma": 0.99, #1
+        "gamma": 0.99, 
         "reward_scale_factor": 1,
         "train_step_counter": global_step,
     }
@@ -146,21 +218,23 @@ def initialize_ddpg_agent(observation_spec, action_spec, global_step, environmen
 
 def initialize_sac_agent(observation_spec, action_spec, global_step, environments):
     # Actor Network
-    actor_net = actor_distribution_network.ActorDistributionNetwork(
-        observation_spec,
-        action_spec,
-        fc_layer_params=(256, 256),
+    actor_net = ddpg.actor_network.ActorNetwork(
+        input_tensor_spec=observation_spec,
+        output_tensor_spec=action_spec, 
+        fc_layer_params=(400, 300),
         activation_fn=tf.keras.activations.relu)
     
-    # Critic Network adapted from DDPG for SAC use
-    critic_net = ddpg_critic_network.CriticNetwork(
+    critic_net = ddpg.critic_network.CriticNetwork(
         input_tensor_spec=(observation_spec, action_spec),
-        observation_fc_layer_params=None,
-        action_fc_layer_params=None,
-        joint_fc_layer_params=(256, 256),
-        activation_fn=tf.keras.activations.relu,
-        output_activation_fn=tf.keras.activations.linear
-    )
+        observation_fc_layer_params=(400,),
+        joint_fc_layer_params=(300,),
+        activation_fn=tf.keras.activations.relu)
+    
+    target_critic_network = ddpg.critic_network.CriticNetwork(
+        input_tensor_spec=(observation_spec, action_spec),
+        observation_fc_layer_params=(400,),
+        joint_fc_layer_params=(300,),
+        activation_fn=tf.keras.activations.relu)
     
     # SAC Agent Initialization
     sac_tf_agent = sac_agent.SacAgent(
@@ -168,15 +242,17 @@ def initialize_sac_agent(observation_spec, action_spec, global_step, environment
         action_spec=action_spec,
         actor_network=actor_net,
         critic_network=critic_net,
-        critic_network_2=critic_net.copy(),  # SAC typically uses two critic networks for stability
-        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        alpha_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=3e-4),
-        target_update_tau=0.005,
-        target_update_period=1,
-        td_errors_loss_fn=tf.math.squared_difference,
+        target_critic_network=target_critic_network,  # SAC typically uses two critic networks for stability
+        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4),
+        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3),
+        alpha_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3),
+        actor_loss_weight=1.2,
+        critic_loss_weight=0.5,
+        target_entropy=-1,
+        target_update_tau=0.05,
+        target_update_period=5,
+        td_errors_loss_fn=tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.NONE),
         gamma=0.99,
-        reward_scale_factor=1.0,
         train_step_counter=global_step,
     )
 
@@ -195,9 +271,7 @@ def initialize_td3_agent(observation_spec, action_spec, global_step, environment
     # Critic Network
     critic_net = ddpg.critic_network.CriticNetwork(
         input_tensor_spec=(observation_spec, action_spec),
-        observation_fc_layer_params=(400,),
-        joint_fc_layer_params=(300,),
-        activation_fn=tf.keras.activations.relu)
+        joint_fc_layer_params=(400, 300), activation_fn=tf.keras.activations.relu)
 
     # TD3 Agent Initialization
     td3_tf_agent = td3_agent.Td3Agent(
@@ -205,11 +279,11 @@ def initialize_td3_agent(observation_spec, action_spec, global_step, environment
         action_spec=action_spec,
         actor_network=actor_net,
         critic_network=critic_net,
-        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3),
-        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4),
+        actor_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4),
+        critic_optimizer=tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3),
         target_update_tau=0.05,
-        target_update_period=100,
-        td_errors_loss_fn=tf.math.squared_difference,
+        target_update_period=5,
+        td_errors_loss_fn=tf.compat.v1.losses.huber_loss,
         gamma=0.99,
         train_step_counter=global_step,
     )
@@ -225,24 +299,27 @@ def initialize_ppo_agent(observation_spec, action_spec, global_step, environment
     actor_net = actor_distribution_network.ActorDistributionNetwork(
         observation_spec,
         action_spec,
-        fc_layer_params=(256, 256),
+        fc_layer_params=(400, 300),
         activation_fn=tf.keras.activations.relu,
     )
 
     value_net = value_network.ValueNetwork(
         observation_spec,
-        fc_layer_params=(256, 256),
+        fc_layer_params=(400, 300),
         activation_fn=tf.keras.activations.relu,
     )
 
     tf_agent = ppo_agent.PPOAgent(
         time_step_spec=environments["train"][f"building_{1}"].time_step_spec(),
         action_spec=action_spec,
-        optimizer= tf.keras.optimizers.Adam(learning_rate=1e-3),
+        optimizer= tf.keras.optimizers.Adam(learning_rate=1e-2),
         actor_net=actor_net,
         value_net=value_net,
+        lambda_value=0.95,
+        entropy_regularization=0.1,
+        importance_ratio_clipping=0,
+    	num_epochs=20,
         train_step_counter=global_step,
-        num_epochs=10,
     )
     
     tf_agent.initialize()
@@ -283,7 +360,6 @@ def setup_rl_training_pipeline(tf_agent, env_train, replay_buffer_capacity,colle
 
     # Collect initial replay data
     initial_collect_driver.run()
-    #initial_collect_driver.run()
     time_step = env_train.reset()
     policy_state = collect_policy.get_initial_state(env_train.batch_size)
 
@@ -297,7 +373,7 @@ def setup_rl_training_pipeline(tf_agent, env_train, replay_buffer_capacity,colle
 
     return iterator, collect_driver, time_step, policy_state
 
-def initialize_wandb_logging(project="DDPG_battery_testing", name="Exp", num_iterations=1500, batch_size=1, a_lr="1e-4", c_lr="1e-3"):
+def initialize_wandb_logging(name="Exp", num_iterations=5000, batch_size=128):
     wandb.login()
     wandb.init(
         project="DDPG_battery_testing",
@@ -305,21 +381,9 @@ def initialize_wandb_logging(project="DDPG_battery_testing", name="Exp", num_ite
         name=name,
         config={
             "train_steps": num_iterations,
-            "batch_size": batch_size,
-            "actor_learning_rate": 1e-3,
-            "critic_learning_rate": 1e-2}
+            "batch_size": batch_size}
     )
     artifact = wandb.Artifact(name='save', type="checkpoint")
-
-    """train_checkpointer = common.Checkpointer(
-            ckpt_dir='checkpoints/ddpg/',
-            max_to_keep=1,
-            agent=tf_agent,
-            policy=tf_agent.policy,
-            replay_buffer=replay_buffer,
-            global_step=global_step
-        )
-        train_checkpointer.initialize_or_restore()"""
 
     return artifact
 
@@ -350,9 +414,37 @@ def agent_training_and_evaluation(global_step, num_test_iterations, collect_driv
             metrics["loss"] = train_loss.loss
             wandb.log(metrics)
     
-    #Testing
-    test_metrics = metric_utils.eager_compute(test_metrics,environments["test"][f"building_{building_index}"], eval_policy, train_step=global_step)
-    result_df = pd.concat([result_df, pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]]})], ignore_index=True)
-    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"])
 
-    return result_df, metrics
+    # Testing
+    #policy_state = eval_policy.get_initial_state(environments["test"][f"building_{building_index}"].batch_size)
+    #time_step = environments["test"][f"building_{building_index}"].reset()
+
+    #captured_actions = []
+
+    #while not time_step.is_last():
+    #    action_step = eval_policy.action(time_step, policy_state)
+    #    time_step = environments["test"][f"building_{building_index}"].step(action_step.action)
+        
+    #    captured_actions.append(action_step.action.numpy().tolist())
+    
+    #test_metrics = metric_utils.eager_compute(
+    #    test_metrics, environments["test"][f"building_{building_index}"], 
+    #    eval_policy, 
+    #    train_step=global_step
+    #)
+
+    #Testing
+    test_metrics = metric_utils.eager_compute(
+        test_metrics,environments["test"][f"building_{building_index}"], 
+        eval_policy, 
+        train_step=global_step
+    )
+
+    result_df = pd.concat(
+        [
+            result_df, 
+            pd.DataFrame({'Building': [building_index], 'Total Profit': [wandb.summary["Final Profit"]], 'Total Emissions' : [wandb.summary['Final Emissions']]})], ignore_index=True)
+    
+    print('Building: ', building_index, ' - Total Profit: ', wandb.summary["Final Profit"], ' - Total Emissions: ', wandb.summary["Final Emissions"])
+    
+    return result_df, metrics #, captured_actions

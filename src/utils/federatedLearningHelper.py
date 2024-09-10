@@ -28,11 +28,11 @@ def load_clustered_buildings(num_clusters=10):
 def prosumption_clustered_buildings(num_clusters=10):
 
     # Catch non-clustered cluster sizes
-    if num_clusters < 2 or num_clusters > 20:
+    if num_clusters < 1 or num_clusters > 13:
         print("Currently, clustering has been done from cluster sizes within the range of 2 to 20.")
         return
-
-    with open(f'../../data/3final_data/cluster_labels.pkl', 'rb') as file:
+    
+    with open(f'../../data/3final_data/prosumption_clusterd_buildings_final.pkl', 'rb') as file:
         cluster_data = pickle.load(file)
 
     # Retrieve cluster data from the provided dictionary
@@ -56,7 +56,7 @@ def save_ddpg_weights(global_tf_agent, model_dir):
 def save_sac_weights(global_tf_agent, model_dir):
     np.savez(os.path.join(model_dir, "actor_weights.npz"), *global_tf_agent._actor_network.get_weights())
     np.savez(os.path.join(model_dir, "critic_weights_1.npz"), *global_tf_agent._critic_network_1.get_weights())
-    np.savez(os.path.join(model_dir, "critic_weights_2.npz"), *global_tf_agent._critic_network_2.get_weights())
+    np.savez(os.path.join(model_dir, "critic_weights_2.npz"), *global_tf_agent._target_critic_network_1.get_weights())
 
 def save_td3_weights(global_td3_agent, model_dir):
     np.savez(os.path.join(model_dir, "actor_weights.npz"), *global_td3_agent._actor_network.get_weights())
@@ -98,7 +98,7 @@ def set_weights_to_sac_agent(local_sac_agent, model_dir):
     
     with np.load(os.path.join(model_dir, "critic_weights_2.npz"), allow_pickle=True) as data:
         critic_weights_2 = [data[f'arr_{i}'] for i in range(len(data.files))]
-        local_sac_agent._critic_network_2.set_weights(critic_weights_2)
+        local_sac_agent._target_critic_network_1.set_weights(critic_weights_2)
 
     return local_sac_agent
 
@@ -183,7 +183,7 @@ def append_ddpg_weights_to_local_storage(tf_agent, local_storage):
 def append_sac_weights_to_local_storage(tf_agent, local_storage):
     local_storage["actor_weights"].append(tf_agent._actor_network.get_weights())
     local_storage["critic_weights_1"].append(tf_agent._critic_network_1.get_weights())
-    local_storage["critic_weights_2"].append(tf_agent._critic_network_2.get_weights())
+    local_storage["critic_weights_2"].append(tf_agent._target_critic_network_1.get_weights())
     return local_storage
 
 def append_td3_weights_to_local_storage(tf_agent, local_storage):
